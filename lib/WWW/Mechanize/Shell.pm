@@ -12,7 +12,7 @@ use Hook::LexWrap;
 use HTML::Display qw();
 
 use vars qw( $VERSION @EXPORT );
-$VERSION = '0.25';
+$VERSION = '0.26';
 @EXPORT = qw( &shell );
 
 =head1 NAME
@@ -142,7 +142,7 @@ sub init {
   };
   $self->option('cookiefile', $args{cookiefile}) if (exists $args{cookiefile});
   $self->source_file($sourcefile) if defined $sourcefile;
-  $self->{browser} = HTML::Display->new(); # undef;
+  $self->{browser} = undef;
 
   # Keep track of the files we consist of, to enable automatic reloading
   $self->{files} = undef;
@@ -247,15 +247,8 @@ sub precmd {
 
 sub browser {
   my ($self) = @_;
-  #return unless $have_ole and $self->option('useole');
-  my $browser = $self->{browser};
-  #unless ($browser) {
-  #  $browser = Win32::OLE->CreateObject("InternetExplorer.Application");
-  #  $browser->{'Visible'} = 1;
-  #  $self->{browser} = $browser;
-  #  $browser->Navigate('about:blank');
-  #};
-  $browser;
+  $self->{browser} ||= HTML::Display->new();
+  $self->{browser};
 };
 
 sub sync_browser {
@@ -273,28 +266,19 @@ sub sync_browser {
   #  unless ($html =~ /<BASE/i);
 };
 
-=for old_version
-  my $browser;
-  $browser = $self->browser;
-  if ($browser) {
-    # We can push the HTML into a IE browser window
-    my $document = $browser->{Document};
-    $document->open("text/html","replace");
-    $document->write($html);
-  } else {
-    # We need to use a temp file for communication
-    require File::Temp;
-    my($tempfh, $tempfile) = File::Temp::tempfile(undef, UNLINK => 1);
-    print $tempfh $html;
-    my $cmdline = sprintf($self->option('browsercmd'), $tempfile);
-    system( $cmdline ) == 0
-      or warn "Couldn't launch '$cmdline' : $?";
-  };
-};
-
 sub prompt_str { ($_[0]->agent->uri || "") . ">" };
 
 sub request_dumper { print $_[1]->as_string if $_[0]->option("dumprequests"); };
+
+sub re_or_string {
+  my ($self,$arg) = @_;
+  if ($arg =~ m!^/(.*)/([imsx]*)$!) {
+    my ($re,$mode) = ($1,$2);
+    $re =~ s!([^\\])/!$1\\/!g;
+    $arg = eval "qr/$re/$mode";
+  };
+  $arg;
+};
 
 =head2 C<$shell-E<gt>history>
 
@@ -523,15 +507,17 @@ sub run_save {
   push @history, q{my @links;} . "\n";
   push @history, q{my @all_links = $agent->links();} . "\n";
 
-  if ($user_link =~ m!^/(.*)/$!) {
-    my $re = qr($1);
+  $user_link = $self->re_or_string($user_link);
+
+  if (ref $user_link) {
     my $count = -1;
+    my $re = $user_link;
     @links = map { $count++; (($_->[0] =~ /$re/)||($_->[1] =~ /$re/)) ? $count : () } @all_links;
     if (@links == 0) {
       print "No match for /$re/.\n";
     };
     push @history, q{my $count = -1;} . "\n";
-    push @history, sprintf q{@links = map { $count++; (($_->[0] =~ /%s/)||($_->[1] =~ /%s/)) ? $count : () } @all_links;} . "\n", $re, $re;
+    push @history, sprintf q{@links = map { $count++; (($_->[0] =~ qr(%s))||($_->[1] =~ qr(%s))) ? $count : () } @all_links;} . "\n", $re, $re;
   } else {
     @links = $user_link;
     push @history, sprintf q{@links = '%s';} . "\n", $user_link;
@@ -791,14 +777,15 @@ Syntax:
 
 sub run_open {
   my ($self,$user_link) = @_;
+  $user_link = $self->re_or_string($user_link);
   my $link = $user_link;
-  my $user_link_expr = qq{'$user_link'};
+  my $user_link_expr = ref $link ? qq{qr($link)} : qq{'$link'};
   unless (defined $link) {
     print "No link given\n";
     return
   };
-  if ($link =~ m!^/(.*)/$!) {
-    my $re = $1;
+  if (ref $link) {
+    my $re = $link;
     my $count = -1;
     my @possible_links = @{$self->agent->links()};
     my @links = map { $count++; $_->[1] =~ /$re/ ? $count : () } @possible_links;
@@ -815,9 +802,6 @@ sub run_open {
         print "Can't follow javascript link $1\n";
         undef $link;
       };
-      # Quote all unescaped slashes
-      $re =~ s!([^\\])/([^\\]|$)!$1\\/$2!g;
-      $user_link_expr = sprintf 'qr/%s/', $re;
     };
   };
 
@@ -1176,6 +1160,11 @@ the WWW::Mechanize::FormFiller::Value subclass you want to use. For
 session fields, C<Keep> is a good candidate, for interactive stuff,
 C<Ask> is a value implemented by the shell.
 
+A field name starting and ending with a slash (C</>) is taken to be
+a regular expression and will be applied to all fields with their
+name matching the expression. A field with a matching name still
+takes precedence over the regular expression.
+
 Syntax:
 
   autofill NAME [PARAMETERS]
@@ -1186,6 +1175,7 @@ Examples:
   autofill password Ask
   autofill selection Random red green orange
   autofill session Keep
+  autofill "/date$/" Random::Date string "%m/%d/%Y"
 
 =cut
 
@@ -1194,9 +1184,17 @@ sub run_autofill {
   @args = ($self)
     if ($class eq 'Ask');
   if ($class) {
+    my $name_vis;
+    $name = $self->re_or_string($name);
+    if (ref $name) {
+      $name_vis = qq{qr($name)};
+      #warn "autofill RE detected $name";
+    } else {
+      $name_vis = qq{"$name"};
+    };
     eval {
       $self->{formfiller}->add_filler($name,$class,@args);
-      $self->add_history( sprintf qq{\$formfiller->add_filler( "%s" => "%s" => %s ); }, $name, $class, join( ",", map {qq{'$_'}} @args));
+      $self->add_history( sprintf qq{\$formfiller->add_filler( %s => "%s" => %s ); }, $name_vis, $class, join( ",", map {qq{'$_'}} @args));
     };
     warn $@
       if $@;
@@ -1374,39 +1372,32 @@ __END__
   get http://www.corion.net/perl-dev
   save /.tar.gz$/
 
-=begin oldversion
+=head1 REGULAR EXPRESSION SYNTAX
 
-#=head1 DISPLAYING HTML
+Some commands take regular expressions as parameters. A regular
+expression B<must> be a single parameter matching C<^/.*/([isxm]+)?$>, so
+you have to use quotes around it if the expression contains spaces :
 
-WWW::Mechanize::Shell can display the HTML of the current page
-in your browser. Under Windows, this is done via an OLE call
-to Microsoft Internet Explorer. If you don't like MSIE or are
-working under Unix where IE is not an option, you can try one
-of the following lines in your .mechanizerc :
+  /link_foo/       # will match as (?-xims:link_foo)
+  "/link foo/"     # will match as (?-xims:link foo)
+  
+Slashes do not need to be escaped, as the shell knows that a RE starts and
+ends with a slash :
+  
+  /link/foo/       # will match as (?-xims:link/foo)
+  "/link/ /foo/"   # will match as (?-xims:link/\s/foo)
 
-  # for galeon
-  set browsercmd "galeon -n %s"
+The C</i> modifier works as expected.
+If you desire more power over the regular expressions, consider dropping
+to Perl or recommend me a good parser module for regular expressions.
 
-  # for mozilla (needs mozilla already started)
-  set browsercmd 'mozilla -remote "openURL(%s)"'
+=head1 DISPLAYING HTML
 
-  # for opera (thanks to Tina Mueller)
-  set browsercmd "opera -newwindow %s"
-
-  # for Win32, using Phoenix instead of IE
-  set useole 0
-  set browsercmd "phoenix.exe %s"
-
-  # for the Mac (thanks to merlyn)
-  set browsercmd "open -a Camino.app %s"
-  # or
-  set browsercmd "open -a Safari.app %s"
-
-  # More lines for other browsers are welcome
-
-The communication is done either via OLE or through tempfiles, so
-the URL in the browser will look weird.
-=end oldversion
+WWW::Mechanize::Shell now uses the module HTML::Display
+to display the HTML of the current page in your browser.
+Have a look at the documentation of HTML::Display how to
+make it use your browser of choice in the case it does not
+already guess it correctly.
 
 =head1 FILLING FORMS VIA CUSTOM CODE
 
@@ -1548,6 +1539,11 @@ Add C<ct> as a convenience command instead of C<eval $self-E<gt>agent-E<gt>ct>
 =item *
 
 Optionally silence the HTML::Parser / HTML::Forms warnings about invalid HTML.
+
+=item *
+
+Support setting of multiple values for checkboxes and selection lists (WWW::Mechanize::Ticker
+does this for checkboxes. Steal that code.)
 
 =back
 

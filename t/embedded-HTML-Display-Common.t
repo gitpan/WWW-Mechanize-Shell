@@ -147,7 +147,7 @@ eval q{
   my $example = sub {
     local $^W = 0;
 
-#line 70 lib/HTML/Display/Common.pm
+#line 72 lib/HTML/Display/Common.pm
   no warnings 'redefine';
   *HTML::Display::new = sub {
     my $class = shift;
@@ -168,7 +168,7 @@ eval q{
 
   }
 };
-is($@, '', "example from line 70");
+is($@, '', "example from line 72");
 
 };
 SKIP: {
@@ -183,7 +183,7 @@ SKIP: {
     {
     undef $main::_STDOUT_;
     undef $main::_STDERR_;
-#line 70 lib/HTML/Display/Common.pm
+#line 72 lib/HTML/Display/Common.pm
   no warnings 'redefine';
   *HTML::Display::new = sub {
     my $class = shift;
@@ -231,7 +231,7 @@ eval q{
   my $example = sub {
     local $^W = 0;
 
-#line 95 lib/HTML/Display/Common.pm
+#line 97 lib/HTML/Display/Common.pm
   no warnings 'redefine';
   *HTML::Display::new = sub {
     my $class = shift;
@@ -245,7 +245,7 @@ eval q{
   my $browser = HTML::Display->new();
 
   # This will display part of the Google logo
-  $browser->display( html => $html, location => 'http://www.google.com' );
+  $browser->display( html => $html, base => 'http://www.google.com' );
 
 
 
@@ -254,7 +254,7 @@ eval q{
 
   }
 };
-is($@, '', "example from line 95");
+is($@, '', "example from line 97");
 
 };
 SKIP: {
@@ -269,7 +269,7 @@ SKIP: {
     {
     undef $main::_STDOUT_;
     undef $main::_STDERR_;
-#line 95 lib/HTML/Display/Common.pm
+#line 97 lib/HTML/Display/Common.pm
   no warnings 'redefine';
   *HTML::Display::new = sub {
     my $class = shift;
@@ -283,12 +283,17 @@ SKIP: {
   my $browser = HTML::Display->new();
 
   # This will display part of the Google logo
-  $browser->display( html => $html, location => 'http://www.google.com' );
+  $browser->display( html => $html, base => 'http://www.google.com' );
 
 
 
 
   isa_ok($browser, "HTML::Display::Dump","The browser");
+  is( $main::_STDOUT_,
+  	'<html><head><base href="http://www.google.com/" /></head><body><img src="/images/hp0.gif"></body></html>',
+  	"HTML gets output");
+  $main::_STDOUT_ = "";
+  $browser->display( html => $html, location => 'http://www.google.com' );
   is( $main::_STDOUT_,
   	'<html><head><base href="http://www.google.com/" /></head><body><img src="/images/hp0.gif"></body></html>',
   	"HTML gets output");
