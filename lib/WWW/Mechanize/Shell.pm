@@ -5,6 +5,62 @@ use Carp;
 use WWW::Mechanize;
 use HTTP::Cookies;
 
+use vars qw( $VERSION );
+$VERSION = '0.04';
+
+=head1 NAME
+
+WWW::Mechanize::Shell - A crude shell for WWW::Mechanize
+
+=head1 SYNOPSIS
+
+=begin example
+
+  #!/usr/bin/perl -w
+  use strict;
+  use WWW::Mechanize::Shell;
+
+  my $shell = WWW::Mechanize::Shell->new("shell", rcfile => undef );
+
+  if (@ARGV) {
+    $shell->source_file( @ARGV );
+  } else {
+    $shell->cmdloop;
+  };
+
+=end example
+
+=for example_testing
+  BEGIN { 
+    require WWW::Mechanize::Shell;
+    no warnings 'once';
+    *WWW::Mechanize::Shell::cmdloop = sub {};
+    eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize() };
+    if ($@) {
+      print "1..1 # The tests must be run interactively, as Term::ReadKey seems to want a terminal\n";
+      exit 0;
+    };
+  };
+  isa_ok( $shell, "WWW::Mechanize::Shell" );
+  
+=head1 DESCRIPTION
+
+This module implements a www-like shell above WWW::Mechanize
+and also has the capability to output crude Perl code that recreates
+the recorded session. Its main use is as an interactive starting point
+for automating a session through WWW::Mechanize.
+
+It has "live" display support for Microsoft Internet Explorer on Win32,
+if anybody has an idea on how to implement this for other browsers, I'll be
+glad to build this in - from what I know, you cannot write raw HTML into
+any other browser window.
+
+The cookie support is there, but no cookies are read from your existing
+sessions. See L<HTTP::Cookies> on how to implement reading/writing
+your current browser cookies.
+
+=cut
+
 # Blindly allow redirects
 {
   no warnings;
@@ -12,12 +68,12 @@ use HTTP::Cookies;
 }
 
 {
-  use WWW::Mechanize::FormFiller;
   package WWW::Mechanize::FormFiller::Value::Ask;
+  use WWW::Mechanize::FormFiller;
   use base 'WWW::Mechanize::FormFiller::Value::Callback';
 
   use vars qw( $VERSION );
-  $VERSION = 0.01;
+  $VERSION = 0.02;
 
   sub new {
     my ($class,$name,$shell) = @_;
@@ -59,9 +115,9 @@ package WWW::Mechanize::Shell;
 # DONE:
 # * Add auto form fill out stuff
 
+use strict;
 use base 'Term::Shell';
 use Win32::OLE;
-use File::Modified;
 use FindBin;
 
 use WWW::Mechanize::FormFiller;
@@ -94,12 +150,22 @@ sub init {
   $self->{options} = {
     autosync => 0,
     autorestart => 0,
+    watchfiles => defined $args{watchfiles} ? $args{watchfiles} : 1,
     cookiefile => 'cookies.txt',
     dumprequests => 0,
   };
 
   # Keep track of the files we consist of, to enable automatic reloading
-  $self->{files} = File::Modified->new(files=>[values %INC, $0]);
+  $self->{files} = undef;
+  if ($self->{options}->{watchfiles}) {
+    eval {
+      require File::Modified;
+      $self->{files} = File::Modified->new(files=>[values %INC, $0]);
+    };
+    if ($@) {
+      warn "Module File::Modified not found. Automatic reloading disabled.\n";
+    };
+  };
 
   # Read our .rc file :
   # I could use File::Homedir, but the docs claim it dosen't work on Win32. Maybe
@@ -140,7 +206,7 @@ sub restart_shell {
 sub precmd {
   my $self = shift @_;
   # We want to restart when any module was changed
-  if ($self->{files}->changed()) {
+  if ($self->{files} and $self->{files}->changed()) {
     print "One or more of the base files were changed\n";
     $self->restart_shell if ($self->option('autorestart'));
   };
@@ -151,7 +217,7 @@ sub precmd {
 sub postcmd {
   my $self = shift @_;
   # We want to restart when any module was changed
-  if ($self->{files}->changed()) {
+  if ($self->{files} and $self->{files}->changed()) {
     print "One or more of the base files were changed\n";
     $self->restart_shell if ($self->option('autorestart'));
   };
@@ -189,12 +255,85 @@ sub sync_browser {
 
 sub prompt_str { $_[0]->agent->{uri} . ">" };
 
+sub catch_smry {
+  my ($self,$command) = @_;
+
+  my $result = eval {
+    require Pod::Constants;
+
+    my @summary;
+    my $module = (ref $self ).".pm";
+    $module =~ s!::!/!g;
+    $module = $INC{$module};
+
+    Pod::Constants::import_from_file( $module, $command => \@summary );
+
+    $summary[0];
+  };
+  if ($@) {
+    return undef;
+  };
+  return $result;
+};
+
+sub catch_help {
+  my ($self,$command) = @_;
+
+  my @result = eval {
+    require Pod::Constants;
+
+    my @summary;
+    my $module = (ref $self ).".pm";
+    $module =~ s!::!/!g;
+    $module = $INC{$module};
+
+    Pod::Constants::import_from_file( $module, $command => \@summary );
+
+    @summary;
+  };
+  if ($@) {
+    $self = ref $self;
+    warn "Pod::Constants not available. Use perldoc $self for help.";
+    return undef;
+  };
+  return join( "\n", @result) . "\n";
+};
+
+=head1 COMMANDS
+
+The shell implements various commands :
+
+=head2 exit
+
+See "quit"
+
+=cut
+
 sub alias_exit { qw(quit) };
+
+=head2 restart
+
+Restart the shell.
+
+This is mostly useful when you are modifying the shell itself.
+
+=cut
 
 sub run_restart {
   my ($self) = @_;
   $self->restart_shell;
 };
+
+=head2 get
+
+Download a specific URL.
+
+This is used as the entry point in all sessions
+
+Syntax:
+  get URL
+
+=cut
 
 sub run_get {
   my ($self,$url) = @_;
@@ -207,14 +346,58 @@ sub run_get {
   $self->add_history('$agent->get("'.$url.'");'."\n",'  $agent->form(1);');
 };
 
+=head2 content
+
+Display the HTML for the current page
+
+This is used as the entry point in all sessions.
+
+=cut
+
+sub run_content {
+  my ($self,$url) = @_;
+  print $self->agent->content;
+  $self->add_history('print $agent->content,"\n"');
+};
+
+=head2 links
+
+Display all links on a page
+
+=cut
+
 sub run_links {
   my ($self) = @_;
-  my $links = $self->agent->extract_links();
+  #my $links = $self->agent->extract_links();
+  my $links = $self->agent->links;
   my $count = 0;
   for my $link (@$links) {
     print "[", $count++, "] ", $link->[1],"\n";
   };
 };
+
+=head2 parse
+
+Dump the output of HTML::TokeParser of the current content
+
+=cut
+
+sub run_parse {
+  my ($self) = @_;
+  my $content = $self->agent->content;
+  my $p = HTML::TokeParser->new(\$content);
+
+  #while (my $token = $p->get_token()) {
+  while (my $token = $p->get_tag("frame")) {
+    print "<",$token->[0],":",ref $token->[1] ? $token->[1]->{src} : "",">";
+  }
+};
+
+=head2 forms
+
+Display all forms on the current page
+
+=cut
 
 sub run_forms {
   my ($self,$number) = @_;
@@ -232,45 +415,94 @@ sub run_forms {
   };
 };
 
-sub help_dump {
-  "Dump the values of the current form"
-};
+=head2 dump
+
+Dump the values of the current form
+
+=cut
 
 sub run_dump {
   my ($self) = @_;
   $self->agent->current_form->dump;
 };
 
+=head2 value
+
+Set a form value
+
+Syntax:
+  value NAME [VALUE]
+
+=cut
+
 sub run_value {
   my ($self,$key,$value) = @_;
-  $self->agent->current_form->value($key,$value);
-  # $self->agent->current_form->dump;
-  # Hmm - neither $key nor $value can contain backslashes nor single quotes ...
-  $self->add_history('$agent->current_form->value(\''.$key.'\',\''.$value.'\');');
+  eval {
+    $self->agent->current_form->value($key,$value);
+    # Hmm - neither $key nor $value may contain backslashes nor single quotes ...
+    $self->add_history('$agent->current_form->value(\''.$key.'\',\''.$value.'\');');
+  };
+  warn $@ if $@;
 };
+
+=head2 submit
+
+Clicks on the button labeled "submit"
+
+=cut
 
 sub run_submit {
   my ($self) = @_;
-  print $self->agent->submit->code;
-  $self->add_history('$agent->submit();');
+  eval {
+    print $self->agent->submit->code;
+    $self->add_history('$agent->submit();');
+  };
+  warn $@ if $@;
 };
+
+=head2 click
+
+Clicks on the button named NAME.
+
+No regular expression expansion is done on NAME.
+
+Syntax:
+  click NAME
+
+=cut
 
 sub run_click {
   my ($self,$button) = @_;
   $button ||= "";
   print $self->agent->current_form->click($button, 1, 1)
     if ($self->option("dumprequests"));
-  my $res = $self->agent->click($button);
-  $self->agent->form(1);
-  print "(",$res->code,")\n";
-  if ($self->option('autosync')) {
-    $self->sync_browser;
+  eval {
+    my $res = $self->agent->click($button);
+    $self->agent->form(1);
+    print "(",$res->code,")\n";
+    if ($self->option('autosync')) {
+      $self->sync_browser;
+    };
+    $self->add_history('$agent->click(\''.$button.'\');');
   };
-  $self->add_history('$agent->click(\''.$button.'\');');
+  warn $@ if $@;
 };
 
+=head2 open
+
+Open a link on the current page
+
+It opens the link whose text is matched by RE,
+and displays all links if more than one matches.
+
+Syntax:
+  open RE
+
+=cut
+
 sub run_open {
-  my ($self,$link) = @_;
+  my ($self,$user_link) = @_;
+  my $link = $user_link;
   unless (defined $link) {
     print "No link given\n";
     return
@@ -278,7 +510,7 @@ sub run_open {
   if ($link =~ m!^/(.*)/$!) {
     my $re = $1;
     my $count = -1;
-    my @possible_links = @{$self->agent->extract_links()};
+    my @possible_links = @{$self->agent->links()};
     my @links = map { $count++; $_->[1] =~ /$re/ ? $count : () } @possible_links;
     if (@links > 1) {
       $self->print_pairs([ @links ],[ map {$possible_links[$_]->[1]} @links ]);
@@ -287,14 +519,15 @@ sub run_open {
       print "No match.\n";
       undef $link;
     } else {
+      print "Found $links[0]\n";
       $link = $links[0];
     };
   };
 
-  if ($link) {
+  if (defined $link) {
     eval {
       $self->agent->follow($link);
-      $self->add_history('$agent->follow(\''.$link.'\');');
+      $self->add_history('$agent->follow(\''.$user_link.'\');');
       $self->agent->form(1);
       if ($self->option('autosync')) {
         $self->sync_browser;
@@ -313,6 +546,12 @@ sub comp_open {
   return grep {/^$word/} map {$_->[1]} (@{$self->agent->extract_links()});
 };
 
+=head2 back
+
+Go back one page in history.
+
+=cut
+
 sub run_back {
   my ($self) = @_;
   $self->agent->back();
@@ -321,10 +560,28 @@ sub run_back {
   $self->add_history('$agent->back();');
 };
 
+=head2 browse
+
+Open Internet Explorer with the current page
+
+Displays the current page in Microsoft Internet Explorer. No
+provision is currently made about IE not being available.
+
+=cut
+
 sub run_browse {
   my ($self) = @_;
   $self->sync_browser;
 };
+
+=head2 set
+
+Sets a shell option
+
+Syntax:
+   set OPTION [value]
+
+=cut
 
 sub run_set {
   my ($self,$option,$value) = @_;
@@ -342,6 +599,12 @@ sub run_set {
   };
 };
 
+=head2 history
+
+Displays your current session history
+
+=cut
+
 sub run_history {
   my ($self) = @_;
   #print join( "", map { $_->[0] } @{$self->{history}}), "\n";
@@ -358,11 +621,29 @@ print $agent->{content};
 FOOTER
 };
 
+=head2 fillout
+
+Fill out the current form
+
+Interactively asks the values hat have no preset
+value via the autofill command.
+
+=cut
+
 sub run_fillout {
   my ($self) = @_;
   $self->{formfiller}->fill_form($self->agent->current_form);
   $self->add_history('$formfiller->fill_form($agent->current_form);');
 };
+
+=head2 cookies
+
+Set the cookie file name
+
+Syntax:
+  cookies FILENAME
+
+=cut
 
 sub run_cookies {
   my ($self,$filename) = @_;
@@ -377,21 +658,51 @@ sub run_ {
   # ignore empty lines
 };
 
-sub help_autofill {
-  my ($shell) = @_;
-  return "Define an automatic value";
-};
+=head2 autofill
 
-sub smry_autofill {
-  my ($shell) = @_;
-  return "Define an automatic value";
-};
+Define an automatic value
+
+Sets a form value to be filled automatically. The NAME parameter is
+the WWW::Mechanize::FormFiller::Value subclass you want to use. For
+session fields, C<Keep> is a good candidate, for interactive stuff,
+C<Ask> is a value implemented by the shell.
+
+Syntax:
+  autofill NAME [PARAMETERS]
+
+Examples:
+
+  autofill login Fixed corion
+  autofill password Ask
+  autofill selection Random
+  autofill session Keep
+
+=cut
 
 sub run_autofill {
   my ($self,$name,$class,@args) = @_;
-  $self->{formfiller}->add_filler($name,$class,@args);
-  $self->add_history('$formfiller->add_filler( ',$name, ' => ',$class, ' => ', join( ",", @args), ');' );
+  @args = ($self)
+    if ($class eq 'Ask');
+  if ($class) {
+    eval {
+      $self->{formfiller}->add_filler($name,$class,@args);
+      $self->add_history('$formfiller->add_filler( ',$name, ' => ',$class, ' => ', join( ",", @args), ');' );
+    };
+    warn $@
+      if $@;
+  } else {
+    warn "No class for the autofiller given\n";
+  };
 };
+
+=head2 eval
+
+Evaluate Perl code and print the result
+
+Syntax:
+  eval CODE
+
+=cut
 
 sub run_eval {
   my ($self) = @_;
@@ -401,167 +712,29 @@ sub run_eval {
   };
 };
 
+=head2 source
+
+Execute a batch of commands from a file.
+
+Syntax:
+  source FILENAME
+
+=cut
+
 sub run_source {
   my ($self,$file) = @_;
   $self->source_file($file);
-};
-
-sub help_eval {
-  my ($shell) = @_;
-  return "Evaluate Perl code and print the result";
-};
-
-sub smry_eval {
-  my ($shell) = @_;
-  return "Evaluate Perl code and print the result";
 };
 
 1;
 
 __END__
 
-=head1 NAME
-
-WWW::Mechanize::Shell - A crude shell for WWW::Mechanize
-
-=head1 SYNOPSIS
-
-=for example
-  require WWW::Mechanize::Shell;
-  no warnings 'once';
-  *WWW::Mechanize::Shell::cmdloop = sub {};
-  eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize() };
-  if ($@) {
-    print "0..0 # The tests must be run interactively, as Term::ReadKey seems to want a terminal\n";
-    exit 0;
-  };
-
-=for example begin
-
-  #!/usr/bin/perl -w
-  use strict;
-  use WWW::Mechanize::Shell;
-
-  my $shell = WWW::Mechanize::Shell->new("shell", rcfile => undef );
-
-  if (@ARGV) {
-    $shell->source_file( @ARGV );
-  } else {
-    $shell->cmdloop;
-  };
-
-=for example end
-
-=for example_testing
-  isa_ok( $shell, "WWW::Mechanize::Shell" );
-
-=head1 DESCRIPTION
-
-This module implements a www-like shell above WWW::Mechanize
-and also has the capability to output crude Perl code that recreates
-the recorded session. Its main use is as an interactive starting point
-for automating a session through WWW::Mechanize.
-
-It has "live" display support for Microsoft Internet Explorer on Win32,
-if anybody has an idea on how to implement this for other browsers, I'll be
-glad to build this in - from what I know, you cannot write raw HTML into
-any other browser window.
-
-The cookie support is there, but no cookies are read from your existing
-sessions. See L<HTTP::Cookies> on how to implement reading/writing
-your current browser cookies.
-
-=head2 COMMANDS
-
-The shell implements various commands :
-
-=over 4
-
-=item restart
-
-Restarts the shell. This is mostly used when you modified the Shell.pm source code.
-
-=item get URL
-
-Downloads a specific URL. This is used as the entry point in all sessions.
-
-=item links
-
-Displays all links on a page.
-
-=item forms
-
-Displays all forms on a page.
-
-=item dump
-
-Dumps the crude Perl code for the current session.
-
-=item value NAME [, VALUE]
-
-Gets respective sets the form field named NAME.
-
-=item submit
-
-Clicks on the button labeled "submit".
-
-=item click NAME
-
-Clicks on the button named NAME.
-
-=item open RE
-
-Opens the link whose text is matched by RE, displays all links if more than one matches.
-
-=item back
-
-Goes back one page.
-
-=item browse
-
-Displays the current page in Microsoft Internet Explorer. No
-provision is currently made about IE not being available.
-
-=item set
-
-Sets an option.
-
-=item history
-
-Displays your current session history.
-
-=item fillout
-
-Fills out all form values for which auto-values have been preset.
-
-=item cookies FILENAME
-
-Loads (and stores) the cookies in FILENAME.
-
-=item autofill NAME [PARAMETERS]
-
-Sets a form value to be filled automatically. The NAME parameter is
-the WWW::Mechanize::FormFiller::Value subclass you want to use. For
-session fields, C<Keep> is a good candidate, for interactive stuff,
-C<Ask> is a value implemented by the shell.
-
-=item eval
-
-Evaluates Perl code and prints the result.
-
-=item source
-
-Loads and executes a sequence of commands from a file.
-
-=back
-
-=head2 TODO
-
-=head2 EXPORT
+=head1 EXPORT
 
 None by default.
 
-=head2 COPYRIGHT AND LICENSE
+=head1 COPYRIGHT AND LICENSE
 
 This library is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
 

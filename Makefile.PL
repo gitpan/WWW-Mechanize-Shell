@@ -15,7 +15,7 @@ WriteMakefile(
 use vars qw($have_test_inline);
 BEGIN {
   eval { require Test::Inline;
-         $have_test_inline = 1; };
+         $have_test_inline = 1 };
   undef $@;
   print "Test::Inline is nice for testing the examples, but not necessary\n"
     unless $have_test_inline;

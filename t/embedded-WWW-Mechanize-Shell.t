@@ -33,12 +33,7 @@ tie *STDERR, 'Catch', '_STDERR_' or die $!;
 
 SKIP: {
     # A header testing whether we find all prerequisites :
-      # Check for module Term::ReadKey
-  eval { require Term::ReadKey };
-  skip "Need module Term::ReadKey to run this test", 1
-    if $@;
-
-  # Check for module WWW::Mechanize::Shell
+      # Check for module WWW::Mechanize::Shell
   eval { require WWW::Mechanize::Shell };
   skip "Need module WWW::Mechanize::Shell to run this test", 1
     if $@;
@@ -56,17 +51,7 @@ eval q{
   my $example = sub {
     local $^W = 0;
 
-#line 430 lib/WWW/Mechanize/Shell.pm
-  require WWW::Mechanize::Shell;
-  no warnings 'once';
-  *WWW::Mechanize::Shell::cmdloop = sub {};
-  eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize() };
-  if ($@) {
-    print "0..0 # The tests must be run interactively, as Term::ReadKey seems to want a terminal\n";
-    exit 0;
-  };
-
-
+#line 18 lib/WWW/Mechanize/Shell.pm
 
   #!/usr/bin/perl -w
   use strict;
@@ -87,7 +72,7 @@ eval q{
 
   }
 };
-is($@, '', "example from line 430");
+is($@, '', "example from line 18");
 
 };
 SKIP: {
@@ -112,17 +97,7 @@ SKIP: {
     {
     undef $main::_STDOUT_;
     undef $main::_STDERR_;
-#line 430 lib/WWW/Mechanize/Shell.pm
-  require WWW::Mechanize::Shell;
-  no warnings 'once';
-  *WWW::Mechanize::Shell::cmdloop = sub {};
-  eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize() };
-  if ($@) {
-    print "0..0 # The tests must be run interactively, as Term::ReadKey seems to want a terminal\n";
-    exit 0;
-  };
-
-
+#line 18 lib/WWW/Mechanize/Shell.pm
 
   #!/usr/bin/perl -w
   use strict;
@@ -139,6 +114,16 @@ SKIP: {
 
 
 
+  BEGIN { 
+    require WWW::Mechanize::Shell;
+    no warnings 'once';
+    *WWW::Mechanize::Shell::cmdloop = sub {};
+    eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize() };
+    if ($@) {
+      print "1..1 # The tests must be run interactively, as Term::ReadKey seems to want a terminal\n";
+      exit 0;
+    };
+  };
   isa_ok( $shell, "WWW::Mechanize::Shell" );
 
     undef $main::_STDOUT_;
