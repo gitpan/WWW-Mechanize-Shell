@@ -13,7 +13,7 @@ use Hook::LexWrap;
 use HTML::Display qw();
 
 use vars qw( $VERSION @EXPORT );
-$VERSION = '0.30';
+$VERSION = '0.31';
 @EXPORT = qw( &shell );
 
 =head1 NAME
@@ -574,18 +574,10 @@ sub run_save {
     $target = $url->path;
     $target =~ s!^(.*/)?([^/]+)$!$2!;
     $url = $url->abs;
-    # use this instead in case you want to use smart mirroring
+    
+    # use this line instead of the next in case you want to use smart mirroring
     #$agent->mirror($url,$target);
-    $agent->follow($link);
-    local *FILE;
-    if (open FILE, "> $target") {
-      binmode FILE;
-      print FILE $agent->content;
-      close FILE;
-    } else {
-      warn "Couldn't create $target : $!\n";
-    };
-    $agent->back;
+    $agent->get( $url, ':content_file' => $target );
   };
 CODE
     my $base = $self->agent->uri;
@@ -597,19 +589,9 @@ CODE
       $url = $url->abs;
       eval {
         $self->status( "$url => $target" );
-		    $self->agent->follow($link);
-        #$self->agent->get($url);
-        local *FILE;
-        if (open FILE, "> $target") {
-          binmode FILE;
-          print FILE $self->agent->content;
-          close FILE;
-          $self->status( "\n" );
-        } else {
-          $self->status( ": $!\n" );
-        };
-        $self->agent->back;
+        $self->agent->get( $url, ':content_file' => $target );
       };
+      
       warn $@ if $@;
     };
   }
@@ -1561,8 +1543,8 @@ Alias for referrer
 
 =cut
 
-sub run_referer { 
-  goto &WWW::Mechanize::Shell::run_referrer 
+sub run_referer {
+  goto &WWW::Mechanize::Shell::run_referrer
 };
 # sub alias_referrer { qw(referer) };
 
