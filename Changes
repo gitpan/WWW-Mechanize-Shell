@@ -1,5 +1,23 @@
 Revision history for Perl extension WWW::Mechanize::Shell.
 
+0.09 20030308
+  - I should go back and use the web interface. It was made for people like me.
+
+0.08 20030308
+  - third time's the charm
+
+0.07 20030308
+  - And again, because I am stupid
+
+0.06 20030308
+  - bumped version because I uploaded a partial file to CPAN ...
+
+0.05 20030307
+  - Fixed the dependency on Win32::OLE - the module now handles other
+    environments gracefully
+  - Added some tests for the module fallbacks (these tests need Test::Without::Module)
+  - moved handling over to cvs
+
 0.04 20030301
   - reupload as the 0.02 and 0.03 upload was broken
 

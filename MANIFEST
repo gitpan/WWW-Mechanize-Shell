@@ -1,5 +1,6 @@
 Changes
 MANIFEST			This list of files
+MANIFEST.skip
 Makefile.PL
 README
 examples/banking.postbank.de.mech
@@ -7,5 +8,7 @@ examples/hotmail.signup.mech
 examples/shell.pl
 lib/WWW/Mechanize/Shell.pm
 t/00-use.t
+t/01-fallback-Win32-OLE.t
+t/02-fallback-Pod-Constant.t
+t/03-documentation.t
 t/99-pod.t
-t/embedded-WWW-Mechanize-Shell.t

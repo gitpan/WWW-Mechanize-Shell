@@ -3,8 +3,10 @@ use Test::More tests => 18;
 
 SKIP: {
   eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize() };
-  skip "The tests must be run interactively, as Term::ReadKey seems to want a terminal", 18
-    if $@;
+  if ($@) {
+    diag "Term::ReadKey seems to want a terminal";
+    *Term::ReadKey::GetTerminalSize = sub {80,24};
+  };
 
   use_ok("WWW::Mechanize::Shell");
 

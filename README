@@ -1,4 +1,4 @@
-WWW/Mechanize/Shell version 0.02
+WWW/Mechanize/Shell version 0.05
 ================================
 
 This is a small shell around WWW::Mechanize
@@ -25,13 +25,13 @@ This module requires these other modules and libraries:
   WWW::Mechanize::FormFiller
 
   Term::Shell
-  
+
   Test::Inline - for the tests
 
 Nice to have are :
 
   Pod::Constants - for the online help
-  
+
 
 COPYRIGHT AND LICENCE
 

@@ -6,7 +6,7 @@ use WWW::Mechanize;
 use HTTP::Cookies;
 
 use vars qw( $VERSION );
-$VERSION = '0.04';
+$VERSION = '0.09';
 
 =head1 NAME
 
@@ -31,18 +31,18 @@ WWW::Mechanize::Shell - A crude shell for WWW::Mechanize
 =end example
 
 =for example_testing
-  BEGIN { 
+  BEGIN {
     require WWW::Mechanize::Shell;
     no warnings 'once';
     *WWW::Mechanize::Shell::cmdloop = sub {};
     eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize() };
     if ($@) {
-      print "1..1 # The tests must be run interactively, as Term::ReadKey seems to want a terminal\n";
-      exit 0;
+      diag "Term::ReadKey seems to want a terminal";
+      *Term::ReadKey::GetTerminalSize = sub {80,24};
     };
   };
   isa_ok( $shell, "WWW::Mechanize::Shell" );
-  
+
 =head1 DESCRIPTION
 
 This module implements a www-like shell above WWW::Mechanize
@@ -73,7 +73,7 @@ your current browser cookies.
   use base 'WWW::Mechanize::FormFiller::Value::Callback';
 
   use vars qw( $VERSION );
-  $VERSION = 0.02;
+  $VERSION = '0.09';
 
   sub new {
     my ($class,$name,$shell) = @_;
@@ -107,20 +107,21 @@ package WWW::Mechanize::Shell;
 # TODO:
 # * Log facility, log all stuff to a file
 # * History persistence (see log facility)
-# * Fix Term::Shell command repetition on empty lines
-# * Add "open()" and "click()" RE functionality
-# * Modify WWW::Mechanize to accept REs as well as the other stuff
 # * Add comment facility to Term::Shell
-# * Add simple script generation
 # DONE:
 # * Add auto form fill out stuff
+# * Add "open()" and "click()" RE functionality
+# * Modify WWW::Mechanize to accept REs as well as the other stuff
+# * Add simple script generation
+# * Fix Term::Shell command repetition on empty lines
 
 use strict;
 use base 'Term::Shell';
-use Win32::OLE;
 use FindBin;
 
 use WWW::Mechanize::FormFiller;
+eval { require Win32::OLE; Win32::OLE->import() };
+my $have_ole = $@ eq '';
 
 sub source_file {
   my ($self,$filename) = @_;
@@ -227,6 +228,7 @@ sub postcmd {
 
 sub browser {
   my ($self) = @_;
+  return unless $have_ole;
   my $browser = $self->{browser};
   unless ($browser) {
     $browser = Win32::OLE->CreateObject("InternetExplorer.Application");
@@ -554,10 +556,13 @@ Go back one page in history.
 
 sub run_back {
   my ($self) = @_;
-  $self->agent->back();
-  $self->sync_browser
-    if ($self->option('autosync'));
-  $self->add_history('$agent->back();');
+  eval {
+    $self->agent->back();
+    $self->sync_browser
+      if ($self->option('autosync'));
+    $self->add_history('$agent->back();');
+  };
+  warn $@ if $@;
 };
 
 =head2 browse
@@ -617,7 +622,7 @@ my $formfiller = WWW::Mechanize::FormFiller->new();
 HEADER
   print join( "", map { "  " . $_->[1] . "\n" } @{$self->{history}}), "\n";
   print <<'FOOTER';
-print $agent->{content};
+print $agent->content;
 FOOTER
 };
 
