@@ -51,7 +51,7 @@ eval q{
   my $example = sub {
     local $^W = 0;
 
-#line 18 lib/WWW/Mechanize/Shell.pm
+#line 23 lib/WWW/Mechanize/Shell.pm
 
   #!/usr/bin/perl -w
   use strict;
@@ -72,7 +72,7 @@ eval q{
 
   }
 };
-is($@, '', "example from line 18");
+is($@, '', "example from line 23");
 
 };
 SKIP: {
@@ -97,7 +97,7 @@ SKIP: {
     {
     undef $main::_STDOUT_;
     undef $main::_STDERR_;
-#line 18 lib/WWW/Mechanize/Shell.pm
+#line 23 lib/WWW/Mechanize/Shell.pm
 
   #!/usr/bin/perl -w
   use strict;
@@ -116,13 +116,18 @@ SKIP: {
 
   BEGIN {
     require WWW::Mechanize::Shell;
+    $ENV{PERL_RL} = 0;
+    #$ENV{PERL_RL_USE_TRK} = 0;
+    $ENV{COLUMNS} = '80';
+    $ENV{LINES} = '24';
+  };
+  BEGIN {
     no warnings 'once';
+    no warnings 'redefine';
+    require Term::ReadKey;
     *WWW::Mechanize::Shell::cmdloop = sub {};
-    eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize() };
-    if ($@) {
-      diag "Term::ReadKey seems to want a terminal";
-      *Term::ReadKey::GetTerminalSize = sub {80,24};
-    };
+    *Term::ReadKey::GetTerminalSize = sub {80,24};
+    *WWW::Mechanize::Shell::display_user_warning = sub {};
   };
   isa_ok( $shell, "WWW::Mechanize::Shell" );
 

@@ -1,16 +1,21 @@
-#!/usr/bin/perl -w
+package WWW::Mechanize::Shell;
 
 use strict;
 use Carp;
 use WWW::Mechanize;
+use WWW::Mechanize::FormFiller;
 use HTTP::Cookies;
+use base qw( Term::Shell Exporter );
+use FindBin;
+use URI::URL;
 
-use vars qw( $VERSION );
-$VERSION = '0.18';
+use vars qw( $VERSION @EXPORT );
+$VERSION = '0.19';
+@EXPORT = qw( &shell );
 
 =head1 NAME
 
-WWW::Mechanize::Shell - A crude shell for WWW::Mechanize
+WWW::Mechanize::Shell - An interactive shell for WWW::Mechanize
 
 =head1 SYNOPSIS
 
@@ -33,13 +38,18 @@ WWW::Mechanize::Shell - A crude shell for WWW::Mechanize
 =for example_testing
   BEGIN {
     require WWW::Mechanize::Shell;
+    $ENV{PERL_RL} = 0;
+    #$ENV{PERL_RL_USE_TRK} = 0;
+    $ENV{COLUMNS} = '80';
+    $ENV{LINES} = '24';
+  };
+  BEGIN {
     no warnings 'once';
+    no warnings 'redefine';
+    require Term::ReadKey;
     *WWW::Mechanize::Shell::cmdloop = sub {};
-    eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize() };
-    if ($@) {
-      diag "Term::ReadKey seems to want a terminal";
-      *Term::ReadKey::GetTerminalSize = sub {80,24};
-    };
+    *Term::ReadKey::GetTerminalSize = sub {80,24};
+    *WWW::Mechanize::Shell::display_user_warning = sub {};
   };
   isa_ok( $shell, "WWW::Mechanize::Shell" );
 
@@ -55,87 +65,44 @@ and thanks to Slaven Rezic for other systems as well. Non-IE browsers
 will use tempfiles while IE will be controled via OLE.
 
 The cookie support is there, but no cookies are read from your existing
-sessions. See L<HTTP::Cookies> on how to implement reading/writing
+browser sessions. See L<HTTP::Cookies> on how to implement reading/writing
 your current browsers cookies.
 
 =cut
 
 # Blindly allow redirects
 {
-  no warnings;
+  no warnings 'redefine';
   *WWW::Mechanize::redirect_ok = sub { print "\nRedirecting to ",$_[1]->uri; $_[0]->{uri} = $_[1]->uri; 1 };
 }
-
-{
-  package WWW::Mechanize::FormFiller::Value::Ask;
-  use WWW::Mechanize::FormFiller;
-  use base 'WWW::Mechanize::FormFiller::Value::Callback';
-
-  use vars qw( $VERSION );
-  $VERSION = '0.18';
-
-  sub new {
-    my ($class,$name,$shell) = @_;
-    my $self = $class->SUPER::new($name, \&ask_value);
-    $self->{shell} = $shell;
-    Carp::carp "WWW::Mechanize::FormFiller::Value::Ask->new called without a value for the shell" unless $self->{shell};
-
-    $self;
-  };
-
-  sub ask_value {
-    my ($self,$input) = @_;
-    my @values;
-    if ($input->possible_values) {
-      @values = $input->possible_values;
-      print join( "|", @values ), "\n";
-    };
-    my $value;
-    $value = $input->value;
-    if ($value eq "") {
-      $value = $self->{shell}->prompt("(" . $input->type . ")" . $input->name . "> [" . ($input->value || "") . "] ",
-                            ($input->value||''), @values );
-    };
-    undef $value if ($value eq "" and $input->type eq "checkbox");
-    $value;
-  };
-};
-
-package WWW::Mechanize::Shell;
 
 # TODO:
 # * Log facility, log all stuff to a file
 # * History persistence (see log facility)
-# * Add comment facility to Term::Shell
 # DONE:
 # * Add auto form fill out stuff
 # * Add "open()" and "click()" RE functionality
 # * Modify WWW::Mechanize to accept REs as well as the other stuff
 # * Add simple script generation
 # * Fix Term::Shell command repetition on empty lines
+# * Add comment facility to Term::Shell
 
-use strict;
-use base 'Term::Shell';
-use FindBin;
-
-use WWW::Mechanize::FormFiller;
 eval { require Win32::OLE; Win32::OLE->import() };
 my $have_ole = $@ eq '';
 
-sub source_file {
-  my ($self,$filename) = @_;
-  local *F;
-  open F, "< $filename" or die "Couldn't open '$filename' : $!\n";
-  while (<F>) {
-    $self->cmd($_);
-  };
-  close F;
-};
+=head2 C<WWW::Mechanize::Shell-E<gt>new %ARGS>
 
-sub add_history {
-  my ($self,@code) = @_;
-  push @{$self->{history}},[$self->line,join "",@code];
-};
+This is the constructor for a new shell instance. Some of the options
+can be passed to the constructor as parameters.
+
+By default, a file C<.mechanizerc> (respectively C<mechanizerc> under Windows)
+is the users home directory is executed before the interactive shell loop is
+entered. This can be used to set some defaults. If you want to supply a different
+filename for the rcfile, the C<rcfile> parameter can be passed to the constructor :
+
+  rcfile => '.myapprc',
+
+=cut
 
 sub init {
   my ($self) = @_;
@@ -149,27 +116,16 @@ sub init {
 
   $self->{options} = {
     autosync => 0,
-    warnings => 1,
+    warnings => (exists $args{warnings} ? $args{warnings} : 1),
     autorestart => 0,
-    watchfiles => defined $args{watchfiles} ? $args{watchfiles} : 1,
+    watchfiles => (exists $args{watchfiles} ? $args{watchfiles} : 1),
     cookiefile => 'cookies.txt',
     dumprequests => 0,
     useole => ($^O =~ /mswin/i) ? 1:0,
     browsercmd => 'galeon -n %s',
   };
-
-  # Keep track of the files we consist of, to enable automatic reloading
-  $self->{files} = undef;
-  if ($self->option('watchfiles')) {
-    eval {
-      require File::Modified;
-      $self->{files} = File::Modified->new(files=>[values %INC, $0]);
-    };
-    #if ($@) {
-    #  warn "Module File::Modified not found. Automatic reloading disabled.\n"
-    #    if $self->option('warnings');
-    #};
-  };
+  # Load the proxy settings from the environment
+  $self->agent->env_proxy();
 
   # Read our .rc file :
   # I could use File::Homedir, but the docs claim it dosen't work on Win32. Maybe
@@ -179,14 +135,64 @@ sub init {
     $sourcefile = delete $args{rcfile};
   } else {
     my $userhome = $^O =~ /win32/i ? $ENV{'USERPROFILE'} || $ENV{'HOME'} : ((getpwuid($<))[7]);
-    $sourcefile = "$userhome/.mechanizerc";
+    $sourcefile = "$userhome/.mechanizerc"
+      if -f "$userhome/.mechanizerc";
   };
+  $self->source_file($sourcefile) if $sourcefile;
   $self->option('cookiefile', $args{cookiefile}) if (exists $args{cookiefile});
 
-  # Load the proxy settings from the environment
-  $self->agent->env_proxy();
+  # Keep track of the files we consist of, to enable automatic reloading
+  $self->{files} = undef;
+  if ($self->option('watchfiles')) {
+    eval {
+      my @files = values %INC;
+      push @files, $0
+        unless $0 eq '-e';
+      require File::Modified;
+      $self->{files} = File::Modified->new(files=>[@files]);
+    };
+    $self->display_user_warning( "Module File::Modified not found. Automatic reloading disabled.\n" )
+      if ($@);
+  };
+};
 
-  $self->source_file($sourcefile) if $sourcefile; # and -f $sourcefile and -r $sourcefile;
+=head2 C<$shell-E<gt>source_file FILENAME>
+
+The C<source_file> method executes the lines of FILENAME
+as if they were typed in.
+
+  $shell->source_file( $filename );
+
+=cut
+
+sub source_file {
+  my ($self,$filename) = @_;
+  local $_; # just to be on the safe side that we don't clobber outside users of $_
+  local *F;
+  open F, "< $filename" or die "Couldn't open '$filename' : $!\n";
+  while (<F>) {
+    $self->cmd($_);
+  };
+  close F;
+};
+
+sub add_history {
+  my ($self,@code) = @_;
+  push @{$self->{history}},[$self->line,join "",@code];
+};
+
+=head2 C<$shell-E<gt>display_user_warning>
+
+All user warnings are routed through this routine
+so they can be rerouted / disabled easily.
+
+=cut
+
+sub display_user_warning {
+  my ($self,@message) = @_;
+
+  warn @message
+    if $self->option('warnings');
 };
 
 sub agent { $_[0]->{agent}; };
@@ -195,7 +201,7 @@ sub option {
   my ($self,$option,$value) = @_;
   if (exists $self->{options}->{$option}) {
     my $result = $self->{options}->{$option};
-    if (defined $value) {
+    if (scalar @_ == 3) {
       $self->{options}->{$option} = $value;
     };
     $result;
@@ -267,6 +273,77 @@ sub sync_browser {
 
 sub prompt_str { ($_[0]->agent->uri || "") . ">" };
 
+=head2 C<$shell-E<gt>history [PREFIX]>
+
+Returns the (relevant) shell history, that is, all commands
+that were not solely for the information of the user. The
+lines are returned as a list.
+
+  print join "\n", $shell->history;
+
+=cut
+
+sub history {
+  my ($self,$prefix) = @_;
+  $prefix ||= "";
+  map { $_->[0] } @{$self->{history}}
+};
+
+=head2 C<$shell-E<gt>script>
+
+Returns the shell history as a Perl program. The
+lines are returned as a list. The lines do not have
+a one-by-one correspondence to the lines in the history.
+
+  print join "\n", $shell->script;
+
+=cut
+
+sub script {
+  my ($self,$prefix) = @_;
+  $prefix ||= "";
+
+  my @result = sprintf <<'HEADER', $^X;
+#%s -w
+use strict;
+use WWW::Mechanize;
+use WWW::Mechanize::FormFiller;
+use URI::URL;
+
+my $agent = WWW::Mechanize->new();
+my $formfiller = WWW::Mechanize::FormFiller->new();
+$agent->env_proxy();
+HEADER
+
+  push @result, map { $prefix.$_->[1] } @{$self->{history}};
+  @result;
+  #push @result, q{ print $agent->content };
+};
+
+=head2 C<$shell-E<gt>status>
+
+C<status> is called for status updates.
+
+=cut
+
+sub status {
+  my $self = shift;
+  print join "", @_;
+};
+
+
+# sub-classed from Term::Shell to handle all run_ requests that have no corresponding sub
+# This is used for comments
+sub catch_run {
+  my ($self) = shift;
+  my ($command) = @_;
+  if ($command =~ /^\s*#/) {
+    # Hey, it's a comment.
+  } else {
+    print $self->msg_unknown_cmd($command);
+  };
+};
+
 # sub-classed from Term::Shell to handle all smry requests
 sub catch_smry {
   my ($self,$command) = @_;
@@ -306,8 +383,8 @@ sub catch_help {
     @summary;
   };
   if ($@) {
-    $self = ref $self;
-    warn "Pod::Constants not available. Use perldoc $self for help.";
+    my $module = ref $self;
+    $self->display_user_warning( "Pod::Constants not available. Use perldoc $module for help.\n" );
     return undef;
   };
   return join( "\n", @result) . "\n";
@@ -338,6 +415,8 @@ sub run_restart {
   $self->restart_shell;
 };
 
+sub activate_first_form { $_[0]->agent->form(1) if $_[0]->agent->forms and scalar @{$_[0]->agent->forms}; };
+
 =head2 get
 
 Download a specific URL.
@@ -352,34 +431,150 @@ Syntax:
 
 sub run_get {
   my ($self,$url) = @_;
-  print "Retrieving $url";
+  $self->status( "Retrieving $url" );
   my $code;
   eval { $code = $self->agent->get($url)->code};
   if ($@) {
     print "\n$@\n" if $@;
     $self->agent->back;
   } else {
-    print "($code)\n"
+    $self->status( "($code)\n" );
   };
 
-  $self->agent->form(1)
-    if $self->agent->forms and scalar @{$self->agent->forms};
+  $self->activate_first_form;
   $self->sync_browser if $self->option('autosync');
-  $self->add_history( sprintf qq{\$agent->get('%s');\n  \$agent->form(1) if \$agent->forms;}, $url);
+  $self->add_history( sprintf q{$agent->get('%s');}."\n".q{  $agent->form(1) if $agent->forms and scalar @{$agent->forms};}, $url);
+};
+
+=head2 save
+
+Download a link into a file.
+
+If more than one link matches the RE, all matching links are
+saved. The filename is taken from the last part of the
+URL. Alternatively, the number of a link may also be given.
+
+Syntax:
+
+  save RE
+
+=cut
+
+sub run_save {
+  my ($self,$user_link) = @_;
+
+  unless (defined $user_link) {
+    print "No link given to save\n";
+    return
+  };
+  my @history;
+
+  my @links = ();
+  my @all_links = $self->agent->links;
+  push @history, q{my @links;};
+
+  if ($user_link =~ m!^/(.*)/$!) {
+    my $re = qr($1);
+    my $count = -1;
+    @links = map { $count++; (($_->[0] =~ /$re/)||($_->[1] =~ /$re/)) ? $count : () } @all_links;
+    if (@links == 0) {
+      print "No match for /$re/.\n";
+    };
+    push @history, sprintf q{@links = map { /%s/ } $agent->links();}, $re;
+  } else {
+    @links = $user_link;
+    push @history, sprintf q{@links = '%s';}, $user_link;
+  };
+
+  if (@links) {
+    $self->add_history( @history,<<'CODE' );
+  my @all_links = $agent->links();
+  my $base = $agent->uri;
+  for my $link (@links) {
+    my $target = $all_links[$link]->[0];
+    my $url = URI::URL->new($target,$base);
+    $target = $url->path;
+    $target =~ s!^(.*/)?([^/]+)$!$2!;
+    $url = $url->abs;
+    $agent->get($url);
+    local *FILE;
+    if (open FILE, "> $target") {
+      binmode FILE;
+      print FILE $agent->content;
+      close FILE;
+    } else {
+      warn "Couldn't create $target : $!\n";
+    };
+    $agent->back;
+  };
+CODE
+    my $base = $self->agent->uri;
+    for my $link (@links) {
+      my $target = $all_links[$link]->[0];
+      my $url = URI::URL->new($target,$base);
+      $target = $url->path;
+      $target =~ s!^(.*/)?([^/]+)$!$2!;
+      $url = $url->abs;
+      eval {
+        $self->status( "$url => $target" );
+        $self->agent->get($url);
+        local *FILE;
+        if (open FILE, "> $target") {
+          binmode FILE;
+          print FILE $self->agent->content;
+          close FILE;
+          $self->status( "\n" );
+        } else {
+          $self->status( ": $!\n" );
+        };
+        $self->agent->back;
+      };
+      warn $@ if $@;
+    };
+  }
 };
 
 =head2 content
 
 Display the HTML for the current page
 
-This is used as the entry point in all sessions.
-
 =cut
 
 sub run_content {
   my ($self,$url) = @_;
-  print $self->agent->content;
+  print $self->agent->content,"\n";
   $self->add_history('print $agent->content,"\n"');
+};
+
+=head2 ua
+
+Get/set the current user agent
+
+Syntax:
+
+  # fake Internet Explorer
+  ua "Mozilla/4.0 (compatible; MSIE 4.01; Windows 98)"
+
+  # fake QuickTime v5
+  ua "QuickTime (qtver=5.0.2;os=Windows NT 5.0Service Pack 2)"
+
+  # fake Mozilla/Gecko based
+  ua "Mozilla/5.001 (windows; U; NT4.0; en-us) Gecko/25250101"
+
+  # set empty user agent :
+  ua ""
+
+=cut
+
+sub run_ua {
+  my ($self,$ua) = @_;
+  my ($result) = $self->agent->agent;
+  if (scalar @_ == 2) {
+    $self->agent->agent($ua);
+    $self->add_history( sprintf q{$agent->agent('%s');}, $ua);
+  } else {
+    print "Current user agent: $result\n";
+  };
 };
 
 =head2 links
@@ -408,9 +603,10 @@ sub run_parse {
   my $content = $self->agent->content;
   my $p = HTML::TokeParser->new(\$content);
 
-  #while (my $token = $p->get_token()) {
-  while (my $token = $p->get_tag("frame")) {
-    print "<",$token->[0],":",ref $token->[1] ? $token->[1]->{src} : "",">";
+  while (my $token = $p->get_token()) {
+  #while (my $token = $p->get_tag("frame")) {
+  #  print "<",$token->[0],":",ref $token->[1] ? $token->[1]->{src} : "",">";
+    print "<",$token->[0],":",$token->[1],">";
   }
 };
 
@@ -470,9 +666,10 @@ sub run_value {
   my ($self,$key,$value) = @_;
 
   eval {
+    local $^W;
     $self->agent->current_form->value($key,$value);
     # Hmm - neither $key nor $value may contain backslashes nor single quotes ...
-    $self->add_history( sprintf qq{\$agent->current_form->value('%s', '%s');}, $key, $value);
+    $self->add_history( sprintf q{{ local $^W; $agent->current_form->value('%s', '%s'); };}, $key, $value);
   };
   warn $@ if $@;
 };
@@ -486,7 +683,7 @@ Clicks on the button labeled "submit"
 sub run_submit {
   my ($self) = @_;
   eval {
-    print $self->agent->submit->code;
+    $self->status( $self->agent->submit->code."\n" );
     $self->add_history('$agent->submit();');
   };
   warn $@ if $@;
@@ -511,8 +708,8 @@ sub run_click {
     if ($self->option("dumprequests"));
   eval {
     my $res = $self->agent->click($button);
-    $self->agent->form(1);
-    print "(",$res->code,")\n";
+    $self->activate_first_form;
+    $self->status( "(".$res->code.")\n");
     if ($self->option('autosync')) {
       $self->sync_browser;
     };
@@ -553,7 +750,7 @@ sub run_open {
       print "No match.\n";
       undef $link;
     } else {
-      print "Found $links[0]\n";
+      $self->status( "Found $links[0]\n" );
       $link = $links[0];
       if ($possible_links[$count]->[0] =~ /^javascript:(.*)/i) {
         print "Can't follow javascript link $1\n";
@@ -565,13 +762,13 @@ sub run_open {
   if (defined $link) {
     eval {
       $self->agent->follow($link);
-      $self->add_history( sprintf qq{\$agent->follow('%s');}, $user_link);
-      $self->agent->form(1);
+      $self->add_history( sprintf qq{\$agent->follow('%s');}, $link);
+      $self->activate_first_form;
       if ($self->option('autosync')) {
         $self->sync_browser;
       } else {
         #print $self->agent->{res}->as_string;
-        print "(",$self->agent->{res}->code,")\n";
+        $self->status( "(".$self->agent->res->code.")\n" );
       };
     };
     warn $@ if $@;
@@ -586,7 +783,7 @@ sub comp_open {
 
 =head2 back
 
-Go back one page in history.
+Go back one page in the browser page history.
 
 =cut
 
@@ -603,10 +800,9 @@ sub run_back {
 
 =head2 browse
 
-Open Internet Explorer with the current page
+Open the web browser with the current page
 
-Displays the current page in Microsoft Internet Explorer. No
-provision is currently made about IE not being available.
+Displays the current page in the browser.
 
 =cut
 
@@ -617,7 +813,7 @@ sub run_browse {
 
 =head2 set
 
-Sets a shell option
+Set a shell option
 
 Syntax:
 
@@ -657,26 +853,29 @@ sub run_set {
 
 =head2 history
 
-Displays your current session history
+Display your current session history as the relevant commands.
+
+Commands that have no influence on the browser state are not added
+to the history.
 
 =cut
 
 sub run_history {
   my ($self) = @_;
-  print sprintf <<'HEADER', $^X;
-#%s -w
-use strict;
-use WWW::Mechanize;
-use WWW::Mechanize::FormFiller;
+  print join( "", map { "$_\n" } ($self->history) ), "\n";
+};
 
-my $agent = WWW::Mechanize->new();
-my $formfiller = WWW::Mechanize::FormFiller->new();
-$agent->env_proxy();
-HEADER
-  print join( "", map { "  " . $_->[1] . "\n" } @{$self->{history}}), "\n";
-  print <<'FOOTER';
-print $agent->content;
-FOOTER
+=head2 script
+
+Display your current session history as a Perl script using WWW::Mechanize.
+
+This command was formerly known as C<history>.
+
+=cut
+
+sub run_script {
+  my ($self) = @_;
+  print join( "\n", $self->script("  ")), "\n";
 };
 
 =head2 fillout
@@ -695,6 +894,65 @@ sub run_fillout {
   };
   warn $@ if $@;
   $self->add_history('$formfiller->fill_form($agent->current_form);');
+};
+
+=head2 auth
+
+Set basic authentication credentials.
+
+Syntax:
+
+  auth [authority realm] user password
+
+If you get back a 401, you can simply supply the matching
+user and password, as the authority and realm are already
+known :
+
+	>get http://www.example.com
+	Retrieving http://www.example.com(401)
+	http://www.example.com>auth corion secret
+	http://www.example.com>get http://www.example.com
+	Retrieving http://www.example.com(200)
+	http://www.example.com>
+
+If you know the authority and the realm in advance, you can
+presupply the credentials, for example at the start of the script :
+
+	>auth www.example.com:80 secure_realm corion secret
+	>get http://www.example.com
+	Retrieving http://www.example.com(200)
+	http://www.example.com>
+
+=cut
+
+sub run_auth {
+    my ($self) = shift;
+    my ($authority, $realm, $user, $password);
+    if (scalar @_ == 2) {
+      unless ($self->agent->res) {
+        print "Can't guess authentification elements without a request.";
+        print "Use the four parameter version instead.";
+        return;
+      };
+
+      ($user,$password) = @_;
+      if ($self->agent->res->www_authenticate =~ /\brealm=(['"]?)(.*)\1/) {
+        $realm = $2
+      } else {
+        $self->warn_user();
+        $realm = "";
+      };
+      $authority = $self->agent->req->uri->authority();
+
+      $self->add_history(          q{($agent->res->www_authenticate =~ /\brealm=(['"]?)(.*)\1/) or die "Couldn't find realm";},
+        						   q{my $realm = $2;},
+                                   q{my $authority = $agent->req->uri->authority();},
+                          sprintf( q{$agent->credentials($authority,$realm,'%s','%s');}, $user,$password ));
+    } else {
+      ($authority, $realm, $user, $password) = @_;
+      $self->add_history( sprintf q{$self->agent->credentials('%s','%s','%s','%s')}, $authority,$realm,$user,$password);
+    };
+    $self->agent->credentials($authority,$realm,$user,$password);
 };
 
 =head2 table
@@ -733,10 +991,11 @@ sub run_table {
       };
     };
 
-    $self->add_history( sprintf 'my @columns = ( %s );', join( ",", map( { s/(['\\])/\\$1/g; qq('$_') } @columns )));
-    $self->add_history( <<'PRINTTABLE' );
+    $self->add_history( sprintf( 'my @columns = ( %s );'."\n", join( ",", map( { s/(['\\])/\\$1/g; qq('$_') } @columns ))),
+                        <<'PRINTTABLE' );
+require HTML::TableExtract;
 my $table = HTML::TableExtract->new( headers => [ @columns ]);
-(my $content = $self->agent->content) =~ s/\&nbsp;?//g;
+(my $content = $agent->content) =~ s/\&nbsp;?//g;
 $table->parse($content);
 print join(", ", @columns),"\n";
 for my $ts ($table->table_states) {
@@ -746,7 +1005,8 @@ for my $ts ($table->table_states) {
 };
 PRINTTABLE
   };
-  warn "Couldn't load HTML::TableExtract: $@" if ($@);
+  $self->display_user_warning( "Couldn't load HTML::TableExtract: $@" )
+    if ($@);
 };
 
 =head2 tables
@@ -785,7 +1045,8 @@ sub run_tables {
       };
     };
   };
-  warn $@ if $@;
+  $self->display_user_warning( $@ )
+    if $@;
 };
 
 =head2 cookies
@@ -840,7 +1101,7 @@ sub run_autofill {
   if ($class) {
     eval {
       $self->{formfiller}->add_filler($name,$class,@args);
-      $self->add_history( sprintf qq{\$formfiller->add_filler( %s => %s => %s ); }, $name, $class, join( ",", @args));
+      $self->add_history( sprintf qq{\$formfiller->add_filler( %s => %s => '%s' ); }, $name, $class, join( ",", @args));
     };
     warn $@
       if $@;
@@ -857,19 +1118,36 @@ Syntax:
 
   eval CODE
 
+For the generated scripts, anything matching the regular expression
+C</\$self-E<gt>agent\b/> is automatically
+replaced by C<$agent> in your eval code, to do the Right Thing.
+
+Examples:
+
+  # Say hello
+  eval "Hello World"
+
+  # And take a look at the current content type
+  eval $self->agent->ct
+
 =cut
 
 sub run_eval {
   my ($self) = @_;
   my $code = $self->line;
   $code =~ /^eval\s+(.*)$/ and do {
-    print eval $1,"\n";
+    my $code = $1;
+    my $script_code = $code;
+    $script_code =~ s/\$self->agent\b/\$agent/g;
+    $script_code =~ s/\$shell->agent\b/\$agent/g;
+    $self->add_history( sprintf q{ print( do { %s },"\n" );}, $script_code);
+    print eval $code,"\n";
   };
 };
 
 =head2 source
 
-Execute a batch of commands from a file.
+Execute a batch of commands from a file
 
 Syntax:
 
@@ -880,9 +1158,79 @@ Syntax:
 sub run_source {
   my ($self,$file) = @_;
   if ($file) {
-    $self->source_file($file);
+    eval { $self->source_file($file); };
+    if ($@) {
+      print "Could not source file '$file' : $@";
+    };
   } else {
     print "Syntax: source FILENAME\n";
+  };
+};
+
+=head2 versions
+
+Print the version numbers of important modules
+
+Syntax:
+
+  versions
+
+=cut
+
+sub run_versions {
+  my ($self) = @_;
+  no strict 'refs';
+  my @modules = qw( WWW::Mechanize::Shell WWW::Mechanize::FormFiller WWW::Mechanize
+  							    Term::Shell
+                    HTML::Parser HTML::TableExtract HTML::Parser
+                    Pod::Constants
+                    File::Modified );
+  eval "use $_" foreach @modules;
+  $self->print_pairs( [@modules], [map { defined ${"${_}::VERSION"} ? ${"${_}::VERSION"} : "<undef>" } @modules]);
+};
+
+sub shell {
+  my $shell = WWW::Mechanize::Shell->new("shell");
+
+  if (@ARGV) {
+    $shell->source_file( @ARGV );
+  } else {
+    $shell->cmdloop;
+  };
+};
+
+{
+  package WWW::Mechanize::FormFiller::Value::Ask;
+  use WWW::Mechanize::FormFiller;
+  use base 'WWW::Mechanize::FormFiller::Value::Callback';
+
+  use vars qw( $VERSION );
+  $VERSION = '0.19';
+
+  sub new {
+    my ($class,$name,$shell) = @_;
+    my $self = $class->SUPER::new($name, \&ask_value);
+    $self->{shell} = $shell;
+    Carp::carp "WWW::Mechanize::FormFiller::Value::Ask->new called without a value for the shell" unless $self->{shell};
+
+    $self;
+  };
+
+  sub ask_value {
+    my ($self,$input) = @_;
+    my @values;
+    if ($input->possible_values) {
+      @values = $input->possible_values;
+      print join( "|", @values ), "\n";
+    };
+    my $value;
+    $value = $input->value;
+    if ($value eq "") {
+      $value = $self->{shell}->prompt("(" . $input->type . ")" . $input->name . "> [" . ($input->value || "") . "] ",
+                            ($input->value||''), @values );
+    };
+    undef $value if ($value eq "" and $input->type eq "checkbox");
+    $value;
   };
 };
 
@@ -898,7 +1246,7 @@ __END__
   get http://www.google.com
   value q "Corions Homepage"
   click btnG
-  history
+  script
   # (yes, this is a bad example of automating, as Google
   #  already has a Perl API. But other sites don't)
 
@@ -907,7 +1255,7 @@ __END__
   get http://www.perlmonks.org
   open "/Saints in/"
   table User Experience Level
-  history
+  script
   # now you have a program that gives you a csv file of
   # that table.
 
@@ -916,6 +1264,12 @@ __END__
   get http://aliens:xxxxx/
   value f path/to/file
   click "upload"
+
+=head2 Batch download
+
+  # download prerelease versions of my modules
+  get http://www.corion.net/perl-dev
+  save /.tar.gz$/
 
 =head1 DISPLAYING HTML
 
@@ -935,6 +1289,11 @@ of the following lines in your .mechanizerc :
   set useole 0
   set browsercmd "phoenix.exe %s"
 
+  # for the Mac (thanks to merlyn)
+  set browsercmd "open -a Camino.app %s"
+  # or
+  set browsercmd "open -a Safari.app %s"
+
   # More lines for other browsers are welcome
 
 The communication is done either via OLE or through tempfiles, so
@@ -944,7 +1303,7 @@ about AppleScript events to remotely control a browser there.
 
 =head1 GENERATED SCRIPTS
 
-The C<history> command outputs a skeleton script that reproduces
+The C<script> command outputs a skeleton script that reproduces
 your actions as done in the current session. It pulls in
 C<WWW::Mechanize::FormFiller>, which is possibly not needed. You
 should add some error and connection checking afterwards.
@@ -963,9 +1322,15 @@ submit button for you (understandably). If you want to create such
 a submit button from within your automation script, use the following
 code :
 
-    $agent->current_form->push_input( submit => { name => "submit", value =>"submit" } );
+  $agent->current_form->push_input( submit => { name => "submit", value =>"submit" } );
 
 This also works for other dynamically generated input fields.
+
+To fake an input field from within a shell session, use the C<eval> command :
+
+  eval $self->agent->current_form->push_input(submit=>{name=>"submit",value=>"submit"});
+
+And yes, the generated script should do the Right Thing for this eval as well.
 
 =head1 PROXY SUPPORT
 
@@ -990,7 +1355,7 @@ Remove the three lines
 in C<sub run_help> and replace them by
 
       my $smry = $o->summary($h);
-      
+
 The shell works without this patch and the online help is still
 available through C<perldoc WWW::Mechanize::Shell>
 
@@ -1018,13 +1383,34 @@ know where the reason for that lies - any hints are welcome !
 
 =item *
 
-Add XPath expressions (by moving C<WWW::Mechanize> from HTML::Parser to XML::XMLlib)
+Add XPath expressions (by moving C<WWW::Mechanize> from HTML::Parser to XML::XMLlib
+or maybe easier, by tacking Class::XPath onto an HTML tree)
+
+=item *
+
+Add C<head> as a command ?
+
+=item *
+
+Add C<referer> and C<referrer> as commands to set the C<Referer> (sic) header
+
+=item *
+
+Add C<ct> as a convenience command instead of C<eval $self-E<gt>agent-E<gt>ct>
+
+=item *
+
+Optionally silence the HTML::Parser / HTML::Forms warnings about invalid HTML.
 
 =back
 
 =head1 EXPORT
 
-None by default.
+The routine C<shell> is exported into the importing namespace. This
+is mainly for convenience so you can use the following commandline
+invocation of the shell like with CPAN :
+
+  perl -MWWW::Mechanize::Shell -e"shell"
 
 =head1 COPYRIGHT AND LICENSE
 

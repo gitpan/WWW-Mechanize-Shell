@@ -8,33 +8,36 @@ use vars qw( @options );
 
 BEGIN {
   @options = qw(
-    autosync     
-    autorestart  
-    watchfiles   
-    cookiefile   
-    dumprequests 
-    useole       
-    browsercmd   
+    autosync
+    autorestart
+    watchfiles
+    cookiefile
+    dumprequests
+    useole
+    browsercmd
     warnings
   );
 };
 
 use Test::More tests => scalar @options*4 +1+4;
-SKIP: {
-  skip "Can't load Term::ReadKey without a terminal", scalar @options *4+1+4
-    unless -t STDIN;
 
-  eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize(); };
-  if ($@) {
-    no warnings 'redefine';
-    *Term::ReadKey::GetTerminalSize = sub {80,24};
-    diag "Term::ReadKey seems to want a terminal";
-  };
+# Disable all ReadLine functionality
+$ENV{PERL_RL} = 0;
+
+SKIP: {
+  #skip "Can't load Term::ReadKey without a terminal", scalar @options *4+1+4
+  #  unless -t STDIN;
+  #eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize(); };
+  #if ($@) {
+  #  no warnings 'redefine';
+  #  *Term::ReadKey::GetTerminalSize = sub {80,24};
+  #  diag "Term::ReadKey seems to want a terminal";
+  #};
 
   use_ok('WWW::Mechanize::Shell');
 
-  my $s = WWW::Mechanize::Shell->new( 'test', rcfile => undef );
-  
+  my $s = WWW::Mechanize::Shell->new( 'test', rcfile => undef, warnings => undef );
+
   for my $option (@options) {
     my $oldval = $s->option($option);
     my $oldval2 = $s->option($option,"newvalue");

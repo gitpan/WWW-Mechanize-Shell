@@ -1,32 +1,38 @@
 use strict;
-use Test::More qw( no_plan );
+use FindBin;
 
-SKIP: {
-  skip "Can't load Term::ReadKey without a terminal", 1
-    unless -t STDIN;
-
-  eval {
-    require Pod::Constants;
-  };
-  skip "Need Pod::Constants to test the documentation", 1
-    if $@;
-
-  eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize(); };
-  if ($@) {
-    no warnings 'redefine';
-    *Term::ReadKey::GetTerminalSize = sub {80,24};
-    diag "Term::ReadKey seems to want a terminal";
-  };
-
-  use_ok("WWW::Mechanize::Shell");
-  my $shell = WWW::Mechanize::Shell->new("shell", rcfile => undef );
-
-  my $module = $INC{'WWW/Mechanize/Shell.pm'};
+use vars qw( @methods );
+BEGIN {
+  my $module = "$FindBin::Bin/../lib/WWW/Mechanize/Shell.pm";
   open MODULE, "< $module"
     or die "Couldn't open module file '$module'";
-  my @methods = map { /^\s*sub run_([a-z]+)\s*\{/ ? $1 : () } <MODULE>;
+  @methods = map { /^\s*sub run_([a-z]+)\s*\{/ ? $1 : () } <MODULE>;
   close MODULE;
+};
 
+use Test::More tests => scalar @methods*3 +2;
+
+# Disable all ReadLine functionality
+$ENV{PERL_RL} = 0;
+
+SKIP: {
+  #skip "Can't load Term::ReadKey without a terminal", 2 + scalar @methods*3
+  #  unless -t STDIN;
+  #eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize(); };
+  #if ($@) {
+  #  no warnings 'redefine';
+  #  *Term::ReadKey::GetTerminalSize = sub {80,24};
+  #  diag "Term::ReadKey seems to want a terminal";
+  #};
+
+  eval { require Pod::Constants;};
+  skip "Need Pod::Constants to test the documentation", 2 + scalar @methods*3
+    if $@;
+
+  use_ok("WWW::Mechanize::Shell");
+
+
+  my $shell = WWW::Mechanize::Shell->new("shell", rcfile => undef, warnings => undef );
   isa_ok($shell,"WWW::Mechanize::Shell");
   for my $method (@methods) {
     my $helptext = $shell->catch_smry($method);

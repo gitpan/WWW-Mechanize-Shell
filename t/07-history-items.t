@@ -47,23 +47,23 @@ BEGIN {
       'get @' => 'get http://admin@www.google.com/',
       'get plain' => 'get http://www.google.com/',
       'open' => 'open foo',
-      'save' => 'save 0',
-      'save re' => 'save /.../',
+      'save' => 'save /.../',
       'submit' => 'submit',
       'value' => 'value key value',
-      'ua' => 'ua foo/1.1',
+      'ua' => 'ua foo/1.0',
   );
-  
+
   eval {
     require HTML::TableExtract;
     $tests{table} = 'table';
-    $tests{'table params'} = 'table foo bar';
+    $tests{table params} = 'table foo bar';
+    ;
   };
 };
 
-use Test::More tests => scalar (keys %tests)*2 +1;
+use Test::More tests => scalar (keys %tests) +1;
 SKIP: {
-#skip "Can't load Term::ReadKey without a terminal", scalar (keys %tests)*2 +1
+#skip "Can't load Term::ReadKey without a terminal", scalar (keys %tests) +1
 #  unless -t STDIN;
 #eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize(); };
 #if ($@) {
@@ -72,13 +72,11 @@ SKIP: {
 #  diag "Term::ReadKey seems to want a terminal";
 #};
 
-use_ok('WWW::Mechanize::Shell');
-
 eval {
   require Test::MockObject;
   Test::MockObject->import();
 };
-skip "Test::MockObject not installed", scalar keys %tests
+skip "Test::MockObject not installed", scalar keys(%tests) +1
   if $@;
 
 my $mock_result = Test::MockObject->new;
@@ -88,58 +86,47 @@ my $mock_form = Test::MockObject->new;
 $mock_form->mock( value => sub {} )
           ->set_list( inputs => ());
 
-my $mock_agent = Test::MockObject->new;
-$mock_agent->set_true($_)
-  for qw( back content get open  );
-$mock_agent->set_false($_)
-  for qw( form forms );
 my $mock_uri = Test::MockObject->new;
 $mock_uri->set_always( abs => 'http://example.com/' )
          ->set_always( path => '/' );
 $mock_uri->fake_module( 'URI::URL', new => sub {$mock_uri} );
 
+my $mock_agent = Test::MockObject->new;
+$mock_agent->set_true($_)
+  for qw( back content get mirror open follow );
+$mock_agent->set_false($_)
+  for qw( form forms );
 $mock_agent->set_always( res => $mock_result )
            ->set_always( submit => $mock_result )
            ->set_always( click => $mock_result )
            ->set_always( current_form => $mock_form )
            ->set_always( follow => 1 )
            ->set_always( links => [['foo','foo link','foo_link'],['foo2','foo2 link','foo2_link']])
-           ->set_always( agent => 'foo/1.0' )
+           ->set_always( agent => 'mocked/1.0')
            ->set_always( uri => $mock_uri );
 
+use_ok('WWW::Mechanize::Shell');
 my $s = WWW::Mechanize::Shell->new( 'test', rcfile => undef, warnings => undef, watchfiles => undef );
 $s->{agent} = $mock_agent;
 
 my @history;
 { no warnings 'redefine';
   *WWW::Mechanize::Shell::add_history = sub {
-    shift;
-    push @history, join "", @_;
+    my $shell = shift;
+    push @history, $shell->line;
   };
 };
 
-sub compiles_ok {
+sub exactly_one_line {
   my ($command,$testname) = @_;
   $testname ||= $command;
   @history = ();
-  $s->cmd('links');
   $s->cmd($command);
-  local $, = "\n";
-  my ($fh,$name) = tempfile();
-  print $fh ( "@history" );
-  close $fh;
-  ok( scalar @history != 0, "$testname is history relevant");
-
-  my $output = `$^X -Ilib -c $name 2>&1`;
-  chomp $output;
-  is( $output, "$name syntax OK", "$testname compiles")
-    or diag "Created file was :\n@history";
-  unlink $name
-    or diag "Couldn't remove tempfile '$name' : $!";
+  is_deeply([@history],[$command],"$testname adds one line to history");
 };
 
 
 foreach my $name (sort keys %tests) {
-  compiles_ok( $tests{$name},$name );
+  exactly_one_line( $tests{$name},$name );
 };
 };

@@ -8,6 +8,7 @@ bin/hotmail.signup.mech
 bin/wwwshell.pl
 lib/WWW/Mechanize/Shell.pm
 t/00-use.t
+t/00a-Term-Shell-catch-smry.t
 t/01-fallback-Win32-OLE.t
 t/02-fallback-Pod-Constant.t
 t/02-fallback-HTML-TableExtract.t
@@ -15,8 +16,16 @@ t/03-documentation.t
 t/04-history-invariant.t
 t/05-options.t
 t/06-valid-output.t
+t/07-history-items.t
+t/08-unknown-command.t
+t/09-invalid-filename.t
 t/10-nonexistent-host.t
 t/11-browse-without-request.t
+t/12-comments.t
+t/13-command-au.t
+t/14-command-identity.t
 t/98-bin.t
 t/99-pod.t
+t/401-server
+t/log-server
 t/embedded-WWW-Mechanize-Shell.t

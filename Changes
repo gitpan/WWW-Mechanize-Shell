@@ -1,5 +1,25 @@
 Revision history for Perl extension WWW::Mechanize::Shell.
 
+0.19
+  - Added t/00a*.t to check for a Term::Shell bug to the MANIFEST
+  - renamed the "history" command to "script"
+  - the new "history" command now outputs the "relevant" shell commands
+  - added "versions" command to print out the versions of the installed modules
+  - added "ua" command to easily change the user agent string
+  - added documentation for some more methods
+  - added understanding of "#" as a comment
+  - added a "save" command to save links into files
+  - added "auth" command for basic authentication (suggested by merlyn)
+  - added live test of the auth command against HTTP::Daemon (code provided by merlyn)
+  - added test that 'url' basic authentication also works (http://login:password@example.com)
+  - added convenience "shell" module method :
+      perl -MWWW::Mechanize::Shell -e "shell"
+  - added full end-to-end testing for many commands and their generated scripts
+  - fixed many bugs in the generated scripts
+  - many documentation fixes
+  - Term::ReadLine now gets disabled for the tests
+  - silenced HTML::Form warning for readonly fields
+
 0.18
   - No functional changes to v0.17
   - Discovered that and documented how file uploads work

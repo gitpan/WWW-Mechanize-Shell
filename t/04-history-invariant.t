@@ -33,6 +33,9 @@ tie *STDOUT, 'Catch', '_STDOUT_' or die $!;
 use vars qw( @history_invariant @history_add );
 
 BEGIN {
+  # Disable all ReadLine functionality
+  $ENV{PERL_RL} = 0;
+
   @history_invariant = qw(
       browse
       cookies
@@ -45,10 +48,13 @@ BEGIN {
       parse
       quit
       restart
+      script
       set
       source
       tables
+      versions
   );
+  push @history_invariant, "#","      #", "# a comment", "  # another comment";
 
   @history_add = qw(
       autofill
@@ -58,31 +64,31 @@ BEGIN {
       fillout
       get
       open
+      save
       submit
       table
+      ua
       value
   );
 };
 
 use Test::More tests => scalar @history_invariant +1;
 SKIP: {
-skip "Can't load Term::ReadKey without a terminal", scalar @history_invariant +1
-  unless -t STDIN;
-
-
-eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize(); };
-if ($@) {
-  no warnings 'redefine';
-  *Term::ReadKey::GetTerminalSize = sub {80,24};
-  diag "Term::ReadKey seems to want a terminal";
-};
+#skip "Can't load Term::ReadKey without a terminal", scalar @history_invariant +1
+#  unless -t STDIN;
+#eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize(); };
+#if ($@) {
+#  no warnings 'redefine';
+#  *Term::ReadKey::GetTerminalSize = sub {80,24};
+#  diag "Term::ReadKey seems to want a terminal";
+#};
 
 use_ok('WWW::Mechanize::Shell');
 
 # Silence all warnings
-$SIG{__WARN__} = sub {};
+#$SIG{__WARN__} = sub {};
 
-my $s = WWW::Mechanize::Shell->new( 'test', rcfile => undef );
+my $s = WWW::Mechanize::Shell->new( 'test', rcfile => undef, warnings => undef );
 $s->agent->{content} = '';
 
 my @history;
