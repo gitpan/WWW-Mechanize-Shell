@@ -7,7 +7,7 @@ SKIP: {
 
   eval {
     require Test::Without::Module;
-    Test::Without::Module->import('Pod::Constants')
+    Test::Without::Module->import('HTML::TableExtract')
   };
   skip "Need Test::Without::Module to test the fallback", 4
     if $@;
@@ -21,16 +21,23 @@ SKIP: {
 
   use_ok("WWW::Mechanize::Shell");
   my $shell = do {
-    local $SIG{__WARN__} = sub {};
+    local $SIG{__WARN__} = sub { };
     WWW::Mechanize::Shell->new("shell", rcfile => undef );
   };
 
   isa_ok($shell,"WWW::Mechanize::Shell");
   my $text;
 
-  eval {
-    $text = $shell->catch_smry('quit');
+  my $warned;
+  {
+    local $SIG{__WARN__} = sub {
+      $warned = $_[0];
+    };
+
+    eval {
+      $shell->cmd("tables");
+    };
   };
-  is( $@, '', "No error without Pod::Constants");
-  is( $text, undef, "No help without Pod::Constants");
+  is( $@, '', "No error without HTML::TableExtract");
+  like( $warned, qr'^HTML\W+TableExtract\.pm did not return a true value', "Missing HTML::TableExtract raises warning");
 };
