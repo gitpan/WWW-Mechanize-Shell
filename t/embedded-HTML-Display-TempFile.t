@@ -46,21 +46,21 @@ eval q{
   my $example = sub {
     local $^W = 0;
 
-#line 11 lib/HTML/Display/TempFile.pm
+#line 13 lib/HTML/Display/TempFile.pm
 
   package HTML::Display::External;
   use base 'HTML::Display::TempFile';
-  
-  sub browsercmd { 
+
+  sub browsercmd {
     # Return the string to pass to system()
     # %s will be replaced by the temp file name
   };
-  
+
 ;
 
   }
 };
-is($@, '', "example from line 11");
+is($@, '', "example from line 13");
 
 };
 SKIP: {

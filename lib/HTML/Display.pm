@@ -2,6 +2,8 @@ package HTML::Display;
 use strict;
 use HTML::TokeParser;
 use Carp qw( croak );
+use vars qw( $VERSION );
+$VERSION = '0.02';
 
 =head1 NAME
 
@@ -84,7 +86,15 @@ add a new class or replace a class (or the rule), modify C<%os_default> :
 =cut
 
 %os_default = (
-  "HTML::Display::Win32::IE" 	=> sub { eval "use Win32::OLE"; (! $@) and $^O =~ qr/mswin32/i },
+  "HTML::Display::Win32::IE"    => sub { 
+  																	 my $have_ole; 
+  																	 eval {
+  																		 require Win32::OLE; 
+  																		 Win32::OLE->import(); 
+  																		 $have_ole = 1;
+  																	 }; 
+  																	 $have_ole and $^O =~ qr/mswin32/i 
+  																 },
   "HTML::Display::Debian" 		=> sub { -x "/bin/x-www-browser" },
   "HTML::Display::OSX"				=> sub { $^O =~ qr/darwin/i },
 );
@@ -112,7 +122,6 @@ sub new {
 
   unless ($best_class) {
     for my $class (sort keys %os_default) {
-      #print "Looking at $class\n";
       $best_class = $class
         if $os_default{$class}->();
     };
@@ -120,11 +129,11 @@ sub new {
   $best_class ||= "HTML::Display::Dump";
 
   { no strict 'refs';
-    eval "require $best_class"
-      unless defined *{"${best_class}::new"}{CODE};
+    undef $@;
+    eval "use $best_class;"
+      unless defined *{"${best_class}::display_html"}{CODE};
+    croak "While trying to load $best_class: $@" if $@;
   };
-  croak $@ if $@;
-  #warn "Using $best_class\n";
   return $best_class->new(@_);
 };
 

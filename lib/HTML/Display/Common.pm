@@ -1,4 +1,6 @@
 package HTML::Display::Common;
+#use base 'HTML::Display::TempFile';
+use URI::URL;
 
 =head1 NAME
 
@@ -15,6 +17,10 @@ use Carp qw( croak );
 Creates a new object as a blessed hash. The passed arguments are stored within
 the hash. If you need to do other things in your constructor, remember to call
 this constructor as well :
+
+=for example
+  no warnings 'redefine';
+  *HTML::Display::WhizBang::display_html = sub {};
 
 =for example begin
 
@@ -95,7 +101,7 @@ it to the user, the C<location> parameter comes in very handy :
 
 =for example begin
 
-  my $html = '<html><body><img src="/images/hp0.gif"></body>';
+  my $html = '<html><body><img src="/images/hp0.gif"></body></html>';
   my $browser = HTML::Display->new();
 
   # This will display part of the Google logo
@@ -105,7 +111,9 @@ it to the user, the C<location> parameter comes in very handy :
 
 =for example_testing
   isa_ok($browser, "HTML::Display::Dump","The browser");
-  is( $main::_STDOUT_,'<html><body><img src="/images/hp0.gif"></body>',"HTML gets output");
+  is( $main::_STDOUT_,
+  	'<html><head><base href="http://www.google.com/" /></head><body><img src="/images/hp0.gif"></body></html>',
+  	"HTML gets output");
 
 =cut
 
@@ -118,7 +126,7 @@ sub display {
     %args = @_;
   };
 
-  $args{location} ||= "";
+  #$args{location} ||= "";
   if ($args{file}) {
     my $filename = delete $args{file};
     local $/;
@@ -128,10 +136,57 @@ sub display {
     $args{html} = <FILE>;
   };
 
-  $args{html} =~ s!(</head>)!<base href="$args{location}" />$1!i
-    unless ($args{html} =~ /<BASE/i);
+  my $new_html;
+  if (exists $args{location}) {
+    # trim to directory create BASE HREF
+    # We are carefull to not trim if we just have http://domain.com
+    my $location = URI::URL->new( $args{location} );
+    my $path = $location->path;
+    $path =~ s%(?<!/)/[^/]*$%/%;
+    $location = sprintf "%s://%s%s", $location->scheme, $location->authority , $path;
 
-  $self->display_html($args{html});
+    require HTML::TokeParser::Simple;
+    my $p = HTML::TokeParser::Simple->new(\$args{html}) || die 'could not create HTML::TokeParser::Simple object';
+    my ($has_head,$has_base);
+    while (my $token = $p->get_token) {
+      if ( $token->is_start_tag('head') ) {
+        $has_head++;
+      } elsif ( $token->is_start_tag('base')) {
+        $has_base++;
+        last;
+      };
+    };
+
+    # restart parsing
+    $p = HTML::TokeParser::Simple->new(\$args{html}) || die 'could not create HTML::TokeParser::Simple object';
+    while (my $token = $p->get_token) {
+      if ( $token->is_start_tag('html') and not $has_head) {
+        $new_html .= $token->as_is . qq{<head><base href="$location" /></head>};
+      } elsif ( $token->is_start_tag('head') and not $has_base) {
+        # handle an empty <head /> :
+        if ($token->as_is =~ m!^<\s*head\s*/>$!i) {
+          $new_html .= qq{<head><base href="$location" /></head>}
+        } else {
+          $new_html .= $token->as_is . qq{<base href="$location" />};
+        };
+      } elsif ( $token->is_start_tag('base') ) {
+        # If they already have a <base href>, give up
+        if ($token->return_attr->{href}) {
+          $new_html = $args{html};
+          last;
+        } else {
+          $token->set_attr('href',$location);
+          $new_html .= $token->as_is;
+        };
+      } else {
+        $new_html .= $token->as_is;
+      }
+    };
+  } else {
+    $new_html = $args{html};
+  };
+
+  $self->display_html($new_html);
 };
 
 1;

@@ -46,7 +46,11 @@ eval q{
   my $example = sub {
     local $^W = 0;
 
-#line 20 lib/HTML/Display/Common.pm
+#line 22 lib/HTML/Display/Common.pm
+  no warnings 'redefine';
+  *HTML::Display::WhizBang::display_html = sub {};
+
+
 
   package HTML::Display::WhizBang;
   use base 'HTML::Display::Common';
@@ -68,7 +72,7 @@ eval q{
 
   }
 };
-is($@, '', "example from line 20");
+is($@, '', "example from line 22");
 
 };
 SKIP: {
@@ -88,7 +92,11 @@ SKIP: {
     {
     undef $main::_STDOUT_;
     undef $main::_STDERR_;
-#line 20 lib/HTML/Display/Common.pm
+#line 22 lib/HTML/Display/Common.pm
+  no warnings 'redefine';
+  *HTML::Display::WhizBang::display_html = sub {};
+
+
 
   package HTML::Display::WhizBang;
   use base 'HTML::Display::Common';
@@ -139,7 +147,7 @@ eval q{
   my $example = sub {
     local $^W = 0;
 
-#line 64 lib/HTML/Display/Common.pm
+#line 70 lib/HTML/Display/Common.pm
   no warnings 'redefine';
   *HTML::Display::new = sub {
     my $class = shift;
@@ -160,7 +168,7 @@ eval q{
 
   }
 };
-is($@, '', "example from line 64");
+is($@, '', "example from line 70");
 
 };
 SKIP: {
@@ -175,7 +183,7 @@ SKIP: {
     {
     undef $main::_STDOUT_;
     undef $main::_STDERR_;
-#line 64 lib/HTML/Display/Common.pm
+#line 70 lib/HTML/Display/Common.pm
   no warnings 'redefine';
   *HTML::Display::new = sub {
     my $class = shift;
@@ -223,7 +231,7 @@ eval q{
   my $example = sub {
     local $^W = 0;
 
-#line 89 lib/HTML/Display/Common.pm
+#line 95 lib/HTML/Display/Common.pm
   no warnings 'redefine';
   *HTML::Display::new = sub {
     my $class = shift;
@@ -233,7 +241,7 @@ eval q{
 
 
 
-  my $html = '<html><body><img src="/images/hp0.gif"></body>';
+  my $html = '<html><body><img src="/images/hp0.gif"></body></html>';
   my $browser = HTML::Display->new();
 
   # This will display part of the Google logo
@@ -246,7 +254,7 @@ eval q{
 
   }
 };
-is($@, '', "example from line 89");
+is($@, '', "example from line 95");
 
 };
 SKIP: {
@@ -261,7 +269,7 @@ SKIP: {
     {
     undef $main::_STDOUT_;
     undef $main::_STDERR_;
-#line 89 lib/HTML/Display/Common.pm
+#line 95 lib/HTML/Display/Common.pm
   no warnings 'redefine';
   *HTML::Display::new = sub {
     my $class = shift;
@@ -271,7 +279,7 @@ SKIP: {
 
 
 
-  my $html = '<html><body><img src="/images/hp0.gif"></body>';
+  my $html = '<html><body><img src="/images/hp0.gif"></body></html>';
   my $browser = HTML::Display->new();
 
   # This will display part of the Google logo
@@ -281,7 +289,9 @@ SKIP: {
 
 
   isa_ok($browser, "HTML::Display::Dump","The browser");
-  is( $main::_STDOUT_,'<html><body><img src="/images/hp0.gif"></body>',"HTML gets output");
+  is( $main::_STDOUT_,
+  	'<html><head><base href="http://www.google.com/" /></head><body><img src="/images/hp0.gif"></body></html>',
+  	"HTML gets output");
 
     undef $main::_STDOUT_;
     undef $main::_STDERR_;

@@ -12,7 +12,7 @@ use Hook::LexWrap;
 use HTML::Display qw();
 
 use vars qw( $VERSION @EXPORT );
-$VERSION = '0.23';
+$VERSION = '0.24';
 @EXPORT = qw( &shell );
 
 =head1 NAME
@@ -83,9 +83,9 @@ your current browsers cookies.
   *WWW::Mechanize::redirect_ok = sub { $_[0]->{__www_mechanize_shell}->status( "\nRedirecting to ".$_[1]->uri ); $_[0]->{uri} = $_[1]->uri; 1 };
 }
 
-=for old_version
-eval { require Win32::OLE; Win32::OLE->import() };
-my $have_ole = $@ eq '';
+#=for old_version
+#eval { require Win32::OLE; Win32::OLE->import() };
+#my $have_ole = $@ eq '';
 
 =head2 C<WWW::Mechanize::Shell-E<gt>new %ARGS>
 

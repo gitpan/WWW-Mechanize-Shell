@@ -46,7 +46,7 @@ eval q{
   my $example = sub {
     local $^W = 0;
 
-#line 11 lib/HTML/Display/Win32/OLE.pm
+#line 13 lib/HTML/Display/Win32/OLE.pm
 
   package HTML::Display::Win32::OleControl;
   use base 'HTML::Display::Win32::OLE';
@@ -66,7 +66,7 @@ eval q{
 
   }
 };
-is($@, '', "example from line 11");
+is($@, '', "example from line 13");
 
 };
 SKIP: {

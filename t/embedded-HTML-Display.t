@@ -51,7 +51,7 @@ eval q{
   my $example = sub {
     local $^W = 0;
 
-#line 13 lib/HTML/Display.pm
+#line 15 lib/HTML/Display.pm
   my $html = "foo\n";
   %HTML::Display::os_default = ();
 
@@ -77,7 +77,7 @@ eval q{
 
   }
 };
-is($@, '', "example from line 13");
+is($@, '', "example from line 15");
 
 };
 SKIP: {
@@ -97,7 +97,7 @@ SKIP: {
     {
     undef $main::_STDOUT_;
     undef $main::_STDERR_;
-#line 13 lib/HTML/Display.pm
+#line 15 lib/HTML/Display.pm
   my $html = "foo\n";
   %HTML::Display::os_default = ();
 
@@ -144,7 +144,7 @@ eval q{
   my $example = sub {
     local $^W = 0;
 
-#line 77 lib/HTML/Display.pm
+#line 79 lib/HTML/Display.pm
 
   # Install class for MagicOS
   $HTML::Display::os_default{"HTML::Display::MagicOS"}
@@ -154,7 +154,7 @@ eval q{
 
   }
 };
-is($@, '', "example from line 77");
+is($@, '', "example from line 79");
 
 };
 SKIP: {

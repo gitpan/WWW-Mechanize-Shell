@@ -41,7 +41,7 @@ eval q{
   my $example = sub {
     local $^W = 0;
 
-#line 11 lib/HTML/Display/OSX/Camino.pm
+#line 13 lib/HTML/Display/OSX/Camino.pm
 
   my $browser = HTML::Display->new(
     class => 'HTML::Display::Dump',
@@ -52,7 +52,7 @@ eval q{
 
   }
 };
-is($@, '', "example from line 11");
+is($@, '', "example from line 13");
 
 };
 SKIP: {

@@ -33,7 +33,12 @@ tie *STDERR, 'Catch', '_STDERR_' or die $!;
 
 SKIP: {
     # A header testing whether we find all prerequisites :
-    
+      # Check for module HTML::Display
+  eval { require HTML::Display };
+  skip "Need module HTML::Display to run this test", 1
+    if $@;
+
+
     # The original POD test
         undef $main::_STDOUT_;
     undef $main::_STDERR_;
@@ -41,18 +46,58 @@ eval q{
   my $example = sub {
     local $^W = 0;
 
-#line 11 lib/HTML/Display/Dump.pm
+#line 13 lib/HTML/Display/Dump.pm
+  use HTML::Display;
+
+
 
   my $browser = HTML::Display->new(
     class => 'HTML::Display::Dump',
   );
   $browser->display("<html><body><h1>Hello world!</h1></body></html>");
 
+
+
+
 ;
 
   }
 };
-is($@, '', "example from line 11");
+is($@, '', "example from line 13");
+
+};
+SKIP: {
+    # A header testing whether we find all prerequisites :
+      # Check for module HTML::Display
+  eval { require HTML::Display };
+  skip "Need module HTML::Display to run this test", 1
+    if $@;
+
+
+    # The original POD test
+    {
+    undef $main::_STDOUT_;
+    undef $main::_STDERR_;
+#line 13 lib/HTML/Display/Dump.pm
+  use HTML::Display;
+
+
+
+  my $browser = HTML::Display->new(
+    class => 'HTML::Display::Dump',
+  );
+  $browser->display("<html><body><h1>Hello world!</h1></body></html>");
+
+
+
+
+  isa_ok($browser,"HTML::Display::Common");
+  is($_STDOUT_,"<html><body><h1>Hello world!</h1></body></html>","Dumped output");
+  is($_STDERR_,undef,"No warnings");
+
+    undef $main::_STDOUT_;
+    undef $main::_STDERR_;
+}
 
 };
 SKIP: {
