@@ -47,6 +47,7 @@ BEGIN {
       'get @' => 'get http://admin@www.google.com/',
       'get plain' => 'get http://www.google.com/',
       'open' => 'open foo',
+      'reload' => 'reload',
       'save' => 'save /.../',
       'submit' => 'submit',
       'value' => 'value key value',
@@ -63,14 +64,6 @@ BEGIN {
 
 use Test::More tests => scalar (keys %tests) +1;
 SKIP: {
-#skip "Can't load Term::ReadKey without a terminal", scalar (keys %tests) +1
-#  unless -t STDIN;
-#eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize(); };
-#if ($@) {
-#  no warnings 'redefine';
-#  *Term::ReadKey::GetTerminalSize = sub {80,24};
-#  diag "Term::ReadKey seems to want a terminal";
-#};
 
 eval {
   require Test::MockObject;
@@ -103,7 +96,8 @@ $mock_agent->set_always( res => $mock_result )
            ->set_always( follow => 1 )
            ->set_always( links => [['foo','foo link','foo_link'],['foo2','foo2 link','foo2_link']])
            ->set_always( agent => 'mocked/1.0')
-           ->set_always( uri => $mock_uri );
+           ->set_always( uri => $mock_uri )
+           ->set_always( request => $mock_result );
 
 use_ok('WWW::Mechanize::Shell');
 my $s = WWW::Mechanize::Shell->new( 'test', rcfile => undef, warnings => undef, watchfiles => undef );

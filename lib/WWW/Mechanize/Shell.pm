@@ -10,7 +10,7 @@ use FindBin;
 use URI::URL;
 
 use vars qw( $VERSION @EXPORT );
-$VERSION = '0.21';
+$VERSION = '0.22';
 @EXPORT = qw( &shell );
 
 =head1 NAME
@@ -840,6 +840,26 @@ sub run_back {
   warn $@ if $@;
 };
 
+=head2 reload
+
+Repeat the last request, thus reloading the current page.
+
+Note that also POST requests are blindly repeated, as this command
+is mostly intended to be used when testing server side code.
+
+=cut
+
+sub run_reload {
+  my ($self) = @_;
+  eval {
+    $self->agent->request($self->agent->{req});
+    $self->add_history('$agent->request($agent->{req});');
+    $self->sync_browser
+      if ($self->option('autosync'));
+  };
+  warn $@ if $@;
+};
+
 =head2 browse
 
 Open the web browser with the current page
@@ -950,7 +970,7 @@ sub run_fillout {
     @interactive_values = @{$self->{answers}};
   };
   warn $@ if $@;
-  $self->add_history( join( "\n", 
+  $self->add_history( join( "\n",
                       map { sprintf( q[$formfiller->add_filler( '%s' => Fixed => '%s' );], @$_ ) } @interactive_values) . '$formfiller->fill_form($agent->current_form);');
 };
 
@@ -997,20 +1017,20 @@ sub run_auth {
       if ($self->agent->res->www_authenticate =~ /\brealm=(['"]?)(.*)\1/) {
         $realm = $2
       } else {
-        $self->warn_user();
+        #$self->warn_user();
         $realm = "";
       };
-      $authority = $self->agent->req->uri->authority();
+      $authority = $self->agent->{req}->uri->authority();
 
       $self->add_history(          q{($agent->res->www_authenticate =~ /\brealm=(['"]?)(.*)\1/) or die "Couldn't find realm";},
-        						   q{my $realm = $2;},
-                                   q{my $authority = $agent->req->uri->authority();},
-                          sprintf( q{$agent->credentials($authority,$realm,'%s','%s');}, $user,$password ));
+        						               q{my $realm = $2;},
+                                   q{my $authority = $agent->{req}->uri->authority();},
+                          sprintf( q{$agent->credentials($authority,$realm,'%s' => '%s');}, $user,$password ));
     } else {
       ($authority, $realm, $user, $password) = @_;
       $self->add_history( sprintf q{$self->agent->credentials('%s','%s','%s','%s')}, $authority,$realm,$user,$password);
     };
-    $self->agent->credentials($authority,$realm,$user,$password);
+    $self->agent->credentials($authority,$realm,$user => $password);
 };
 
 =head2 table
@@ -1193,11 +1213,10 @@ Examples:
 sub run_eval {
   my ($self) = @_;
   my $code = $self->line;
-  $code =~ /^eval\s+(.*)$/ and do {
+  $code =~ /^eval\s+(.*)$/sm and do {
     my $code = $1;
     my $script_code = $code;
     $script_code =~ s/\$self->agent\b/\$agent/g;
-    $script_code =~ s/\$shell->agent\b/\$agent/g;
     $self->add_history( sprintf q{ print( do { %s },"\n" );}, $script_code);
     print eval $code,"\n";
   };
@@ -1269,6 +1288,7 @@ sub shell {
     my ($class,$name,$shell) = @_;
     # Using the name here to allow for late binding and overriding via eval()
     # from the shell command line
+    #warn __PACKAGE__ . "::ask_value";
     my $self = $class->SUPER::new($name, __PACKAGE__ . '::ask_value');
     $self->{shell} = $shell;
     Carp::carp "WWW::Mechanize::FormFiller::Value::Ask->new called without a value for the shell" unless $self->{shell};
@@ -1285,12 +1305,13 @@ sub shell {
     };
     my $value;
     $value = $input->value;
-    if ($value eq "") {
+    #warn $value if $value;
+    if ($input->type !~ /^(submit|hidden)$/) {
       $value = $self->{shell}->prompt("(" . $input->type . ")" . $input->name . "> [" . ($input->value || "") . "] ",
-                            ($input->value||''), @values );
+                              ($input->value||''), @values );
+      undef $value if ($value eq "" and $input->type eq "checkbox");
+      push @{$self->{shell}->{answers}}, [ $input->name, $value ];
     };
-    undef $value if ($value eq "" and $input->type eq "checkbox");
-    push @{$self->{shell}->{answers}}, [ $input->name, $value ];
     $value;
   };
 };
@@ -1382,7 +1403,7 @@ This method can also be used to retrieve data from shell scripts :
   eval sub &::custom_today { chomp `date` };
   autofill date Callback WWW::Mechanize::Shell::custom_today
   fillout
-  
+
 As the namespace is different between the shell and the generated
 script, make sure you always fully qualify your subroutine names,
 either in your own namespace or in the main namespace.
