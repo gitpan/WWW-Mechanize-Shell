@@ -1,4 +1,4 @@
-#!D:\perl\5.8.2\bin\perl.exe -w
+#!/opt/perl58/bin/perl -w
 
 use Test::More 'no_plan';
 
@@ -20,8 +20,9 @@ sub CLOSE {}    # XXX STDERR/STDOUT.  This is not the behavior we want.
 sub READ {}
 sub READLINE {}
 sub GETC {}
+sub BINMODE {}
 
-my $Original_File = 'lib\HTML\Display\Win32\IE.pm';
+my $Original_File = 'lib/HTML/Display/Win32/IE.pm';
 
 package main;
 
@@ -30,7 +31,11 @@ $SIG{__WARN__} = sub { $main::_STDERR_ .= join '', @_; };
 tie *STDOUT, 'Catch', '_STDOUT_' or die $!;
 tie *STDERR, 'Catch', '_STDERR_' or die $!;
 
-    undef $main::_STDOUT_;
+SKIP: {
+    # A header testing whether we find all prerequisites :
+    
+    # The original POD test
+        undef $main::_STDOUT_;
     undef $main::_STDERR_;
 eval q{
   my $example = sub {
@@ -49,6 +54,12 @@ eval q{
 };
 is($@, '', "example from line 14");
 
-    undef $main::_STDOUT_;
+};
+SKIP: {
+    # A header testing whether we find all prerequisites :
+    
+    # The original POD test
+        undef $main::_STDOUT_;
     undef $main::_STDERR_;
 
+};

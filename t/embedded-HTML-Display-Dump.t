@@ -1,4 +1,4 @@
-#!D:\perl\5.8.2\bin\perl.exe -w
+#!/opt/perl58/bin/perl -w
 
 use Test::More 'no_plan';
 
@@ -20,8 +20,9 @@ sub CLOSE {}    # XXX STDERR/STDOUT.  This is not the behavior we want.
 sub READ {}
 sub READLINE {}
 sub GETC {}
+sub BINMODE {}
 
-my $Original_File = 'lib\HTML\Display\Dump.pm';
+my $Original_File = 'lib/HTML/Display/Dump.pm';
 
 package main;
 
@@ -30,7 +31,16 @@ $SIG{__WARN__} = sub { $main::_STDERR_ .= join '', @_; };
 tie *STDOUT, 'Catch', '_STDOUT_' or die $!;
 tie *STDERR, 'Catch', '_STDERR_' or die $!;
 
-    undef $main::_STDOUT_;
+SKIP: {
+    # A header testing whether we find all prerequisites :
+      # Check for module HTML::Display
+  eval { require HTML::Display };
+  skip "Need module HTML::Display to run this test", 1
+    if $@;
+
+
+    # The original POD test
+        undef $main::_STDOUT_;
     undef $main::_STDERR_;
 eval q{
   my $example = sub {
@@ -55,7 +65,17 @@ eval q{
 };
 is($@, '', "example from line 13");
 
-{
+};
+SKIP: {
+    # A header testing whether we find all prerequisites :
+      # Check for module HTML::Display
+  eval { require HTML::Display };
+  skip "Need module HTML::Display to run this test", 1
+    if $@;
+
+
+    # The original POD test
+    {
     undef $main::_STDOUT_;
     undef $main::_STDERR_;
 #line 13 lib/HTML/Display/Dump.pm
@@ -79,6 +99,12 @@ is($@, '', "example from line 13");
     undef $main::_STDERR_;
 }
 
-    undef $main::_STDOUT_;
+};
+SKIP: {
+    # A header testing whether we find all prerequisites :
+    
+    # The original POD test
+        undef $main::_STDOUT_;
     undef $main::_STDERR_;
 
+};

@@ -14,7 +14,7 @@ use HTML::Display qw();
 use HTML::TokeParser::Simple;
 
 use vars qw( $VERSION @EXPORT );
-$VERSION = '0.34';
+$VERSION = '0.35';
 @EXPORT = qw( &shell );
 
 =head1 NAME
@@ -182,7 +182,7 @@ sub source_file {
   while (<F>) {
     $self->cmd($_);
     warn "cmd: $_"
-			if $self->{options}->{verbose};
+      if $self->{options}->{verbose};
   };
   close F;
 };
@@ -719,11 +719,12 @@ sub run_forms {
   my ($self,$number) = @_;
 
   my $count = 1;
-  my @forms = $self->agent->forms;
+  my $agent = $self->agent;
+  my @forms = $agent->forms;
   if (@forms) {
-    for my $form (@forms) {
+    for (@forms) {
       print "Form [",$count++,"]\n";
-      $form->dump;
+      $_->dump;
     };
   } else {
     print "No forms on current page.\n";

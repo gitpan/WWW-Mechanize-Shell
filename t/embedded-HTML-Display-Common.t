@@ -1,4 +1,4 @@
-#!D:\perl\5.8.2\bin\perl.exe -w
+#!/opt/perl58/bin/perl -w
 
 use Test::More 'no_plan';
 
@@ -20,8 +20,9 @@ sub CLOSE {}    # XXX STDERR/STDOUT.  This is not the behavior we want.
 sub READ {}
 sub READLINE {}
 sub GETC {}
+sub BINMODE {}
 
-my $Original_File = 'lib\HTML\Display\Common.pm';
+my $Original_File = 'lib/HTML/Display/Common.pm';
 
 package main;
 
@@ -30,7 +31,16 @@ $SIG{__WARN__} = sub { $main::_STDERR_ .= join '', @_; };
 tie *STDOUT, 'Catch', '_STDOUT_' or die $!;
 tie *STDERR, 'Catch', '_STDERR_' or die $!;
 
-    undef $main::_STDOUT_;
+SKIP: {
+    # A header testing whether we find all prerequisites :
+      # Check for module base
+  eval { require base };
+  skip "Need module base to run this test", 1
+    if $@;
+
+
+    # The original POD test
+        undef $main::_STDOUT_;
     undef $main::_STDERR_;
 eval q{
   my $example = sub {
@@ -64,7 +74,22 @@ eval q{
 };
 is($@, '', "example from line 22");
 
-{
+};
+SKIP: {
+    # A header testing whether we find all prerequisites :
+      # Check for module HTML::Display
+  eval { require HTML::Display };
+  skip "Need module HTML::Display to run this test", 1
+    if $@;
+
+  # Check for module base
+  eval { require base };
+  skip "Need module base to run this test", 1
+    if $@;
+
+
+    # The original POD test
+    {
     undef $main::_STDOUT_;
     undef $main::_STDERR_;
 #line 22 lib/HTML/Display/Common.pm
@@ -98,10 +123,25 @@ is($@, '', "example from line 22");
     undef $main::_STDERR_;
 }
 
-    undef $main::_STDOUT_;
+};
+SKIP: {
+    # A header testing whether we find all prerequisites :
+    
+    # The original POD test
+        undef $main::_STDOUT_;
     undef $main::_STDERR_;
 
-    undef $main::_STDOUT_;
+};
+SKIP: {
+    # A header testing whether we find all prerequisites :
+      # Check for module HTML::Display::Dump
+  eval { require HTML::Display::Dump };
+  skip "Need module HTML::Display::Dump to run this test", 1
+    if $@;
+
+
+    # The original POD test
+        undef $main::_STDOUT_;
     undef $main::_STDERR_;
 eval q{
   my $example = sub {
@@ -130,7 +170,17 @@ eval q{
 };
 is($@, '', "example from line 72");
 
-{
+};
+SKIP: {
+    # A header testing whether we find all prerequisites :
+      # Check for module HTML::Display::Dump
+  eval { require HTML::Display::Dump };
+  skip "Need module HTML::Display::Dump to run this test", 1
+    if $@;
+
+
+    # The original POD test
+    {
     undef $main::_STDOUT_;
     undef $main::_STDERR_;
 #line 72 lib/HTML/Display/Common.pm
@@ -157,10 +207,25 @@ is($@, '', "example from line 72");
     undef $main::_STDERR_;
 }
 
-    undef $main::_STDOUT_;
+};
+SKIP: {
+    # A header testing whether we find all prerequisites :
+    
+    # The original POD test
+        undef $main::_STDOUT_;
     undef $main::_STDERR_;
 
-    undef $main::_STDOUT_;
+};
+SKIP: {
+    # A header testing whether we find all prerequisites :
+      # Check for module HTML::Display::Dump
+  eval { require HTML::Display::Dump };
+  skip "Need module HTML::Display::Dump to run this test", 1
+    if $@;
+
+
+    # The original POD test
+        undef $main::_STDOUT_;
     undef $main::_STDERR_;
 eval q{
   my $example = sub {
@@ -191,7 +256,17 @@ eval q{
 };
 is($@, '', "example from line 97");
 
-{
+};
+SKIP: {
+    # A header testing whether we find all prerequisites :
+      # Check for module HTML::Display::Dump
+  eval { require HTML::Display::Dump };
+  skip "Need module HTML::Display::Dump to run this test", 1
+    if $@;
+
+
+    # The original POD test
+    {
     undef $main::_STDOUT_;
     undef $main::_STDERR_;
 #line 97 lib/HTML/Display/Common.pm
@@ -227,6 +302,12 @@ is($@, '', "example from line 97");
     undef $main::_STDERR_;
 }
 
-    undef $main::_STDOUT_;
+};
+SKIP: {
+    # A header testing whether we find all prerequisites :
+    
+    # The original POD test
+        undef $main::_STDOUT_;
     undef $main::_STDERR_;
 
+};
