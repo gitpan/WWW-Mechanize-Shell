@@ -8,9 +8,11 @@ use HTTP::Cookies;
 use base qw( Term::Shell Exporter );
 use FindBin;
 use URI::URL;
+use Hook::LexWrap;
+use HTML::Display qw();
 
 use vars qw( $VERSION @EXPORT );
-$VERSION = '0.22';
+$VERSION = '0.23';
 @EXPORT = qw( &shell );
 
 =head1 NAME
@@ -31,7 +33,7 @@ or alternatively as a custom shell program via :
   use strict;
   use WWW::Mechanize::Shell;
 
-  my $shell = WWW::Mechanize::Shell->new("shell", rcfile => undef );
+  my $shell = WWW::Mechanize::Shell->new("shell");
 
   if (@ARGV) {
     $shell->source_file( @ARGV );
@@ -45,17 +47,15 @@ or alternatively as a custom shell program via :
   BEGIN {
     require WWW::Mechanize::Shell;
     $ENV{PERL_RL} = 0;
-    #$ENV{PERL_RL_USE_TRK} = 0;
     $ENV{COLUMNS} = '80';
     $ENV{LINES} = '24';
   };
   BEGIN {
     no warnings 'once';
     no warnings 'redefine';
-    require Term::ReadKey;
     *WWW::Mechanize::Shell::cmdloop = sub {};
-    *Term::ReadKey::GetTerminalSize = sub {80,24};
     *WWW::Mechanize::Shell::display_user_warning = sub {};
+    *WWW::Mechanize::Shell::source_file = sub {};
   };
   isa_ok( $shell, "WWW::Mechanize::Shell" );
 
@@ -66,6 +66,7 @@ and also has the capability to output crude Perl code that recreates
 the recorded session. Its main use is as an interactive starting point
 for automating a session through WWW::Mechanize.
 
+=for old_version
 It has "live" display support for Microsoft Internet Explorer on Win32
 and thanks to Slaven Rezic for other systems as well. Non-IE browsers
 will use tempfiles while IE will be controled via OLE.
@@ -82,6 +83,7 @@ your current browsers cookies.
   *WWW::Mechanize::redirect_ok = sub { $_[0]->{__www_mechanize_shell}->status( "\nRedirecting to ".$_[1]->uri ); $_[0]->{uri} = $_[1]->uri; 1 };
 }
 
+=for old_version
 eval { require Win32::OLE; Win32::OLE->import() };
 my $have_ole = $@ eq '';
 
@@ -106,7 +108,6 @@ sub init {
   $self->{agent} = WWW::Mechanize->new();
   $self->agent->{__www_mechanize_shell} = $self;
 
-  $self->{browser} = undef;
   $self->{formfiller} = WWW::Mechanize::FormFiller->new(default => [ Ask => $self ]);
 
   $self->{history} = [];
@@ -118,9 +119,13 @@ sub init {
     watchfiles => (exists $args{watchfiles} ? $args{watchfiles} : 1),
     cookiefile => 'cookies.txt',
     dumprequests => 0,
-    useole => ($^O =~ /mswin/i) ? 1:0,
-    browsercmd => 'galeon -n %s',
+    #useole => ($^O =~ /mswin/i) ? 1:0,
+    #browsercmd => 'galeon -n %s',
   };
+  # Install the request dumper :
+  $self->{request_wrapper} = wrap 'WWW::Mechanize::request',
+                               pre => sub { $self->request_dumper($_[1]) if $self->option("dumprequests"); };
+
   # Load the proxy settings from the environment
   $self->agent->env_proxy();
 
@@ -135,16 +140,16 @@ sub init {
     $sourcefile = "$userhome/.mechanizerc"
       if -f "$userhome/.mechanizerc";
   };
-  $self->source_file($sourcefile) if $sourcefile;
   $self->option('cookiefile', $args{cookiefile}) if (exists $args{cookiefile});
+  $self->source_file($sourcefile) if defined $sourcefile;
+  $self->{browser} = HTML::Display->new(); # undef;
 
   # Keep track of the files we consist of, to enable automatic reloading
   $self->{files} = undef;
   if ($self->option('watchfiles')) {
     eval {
-      my @files = values %INC;
-      push @files, $0
-        unless $0 eq '-e';
+      my @files = grep { -f && -r && $_ ne '-e' } values %INC;
+      local $, = ",";
       require File::Modified;
       $self->{files} = File::Modified->new(files=>[@files]);
     };
@@ -163,6 +168,7 @@ circular reference. This method does this.
 
 sub release_agent {
   my ($self) = @_;
+  undef $self->{request_wrapper};
   $self->{agent} = undef;
 };
 
@@ -222,9 +228,10 @@ sub option {
 };
 
 sub restart_shell {
-  print "Restarting $0\n";
-
-  exec $^X, $0, @ARGV;
+  if ($0 ne '-e') {
+    print "Restarting $0\n";
+    exec $^X, $0, @ARGV;
+  };
 };
 
 sub precmd {
@@ -240,14 +247,14 @@ sub precmd {
 
 sub browser {
   my ($self) = @_;
-  return unless $have_ole and $self->option('useole');
+  #return unless $have_ole and $self->option('useole');
   my $browser = $self->{browser};
-  unless ($browser) {
-    $browser = Win32::OLE->CreateObject("InternetExplorer.Application");
-    $browser->{'Visible'} = 1;
-    $self->{browser} = $browser;
-    $browser->Navigate('about:blank');
-  };
+  #unless ($browser) {
+  #  $browser = Win32::OLE->CreateObject("InternetExplorer.Application");
+  #  $browser->{'Visible'} = 1;
+  #  $self->{browser} = $browser;
+  #  $browser->Navigate('about:blank');
+  #};
   $browser;
 };
 
@@ -260,9 +267,13 @@ sub sync_browser {
   # Prepare the HTML for local display :
   my $html = $self->agent->res->content;
   my $location = $self->agent->{uri};
-  $html =~ s!(</head>)!<base href="$location" />$1!i
-    unless ($html =~ /<BASE/i);
+  my $browser = $self->browser;
+  $browser->display( html => $html, location => $location );
+  #$html =~ s!(</head>)!<base href="$location" />$1!i
+  #  unless ($html =~ /<BASE/i);
+};
 
+=for old_version
   my $browser;
   $browser = $self->browser;
   if ($browser) {
@@ -282,6 +293,8 @@ sub sync_browser {
 };
 
 sub prompt_str { ($_[0]->agent->uri || "") . ">" };
+
+sub request_dumper { print $_[1]->as_string if $_[0]->option("dumprequests"); };
 
 =head2 C<$shell-E<gt>history>
 
@@ -441,7 +454,8 @@ sub alias_exit { qw(quit) };
 
 Restart the shell.
 
-This is mostly useful when you are modifying the shell itself.
+This is mostly useful when you are modifying the shell itself. It dosen't
+work if you use the shell in oneliner mode with C<-e>.
 
 =cut
 
@@ -620,6 +634,9 @@ sub run_ua {
 
 Display all links on a page
 
+The links numbers displayed can used by C<open> to directly
+select a link to follow.
+
 =cut
 
 sub run_links {
@@ -724,6 +741,7 @@ sub run_submit {
   eval {
     $self->status( $self->agent->submit->code."\n" );
     $self->add_history('$agent->submit();');
+    $self->sync_browser if $self->option('autosync');
   };
   warn $@ if $@;
 };
@@ -743,8 +761,6 @@ Syntax:
 sub run_click {
   my ($self,$button) = @_;
   $button ||= "";
-  print $self->agent->current_form->click($button, 1, 1)
-    if ($self->option("dumprequests"));
   eval {
     my $res = $self->agent->click($button);
     $self->activate_first_form;
@@ -759,14 +775,17 @@ sub run_click {
 
 =head2 open
 
-Open a link on the current page
+<open> accepts one argument, which can be a regular expression or the number
+of a link on the page, starting at zero. These numbers are displayed by the
+C<links> function. It goes directly to the page if a number is used
+or if the RE has one match. Otherwise, a list of links matching
+the regular expression is displayed.
 
-It opens the link whose text is matched by RE,
-and displays all links if more than one matches.
+The regular expression should start and end with "/".
 
 Syntax:
 
-  open RE
+  open  [ RE | # ]
 
 =cut
 
@@ -852,8 +871,10 @@ is mostly intended to be used when testing server side code.
 sub run_reload {
   my ($self) = @_;
   eval {
-    $self->agent->request($self->agent->{req});
-    $self->add_history('$agent->request($agent->{req});');
+    #$self->agent->request($self->agent->{req});
+    #$self->add_history('$agent->request($agent->{req});');
+    $self->agent->reload();
+    $self->add_history('$agent->reload;');
     $self->sync_browser
       if ($self->option('autosync'));
   };
@@ -885,15 +906,11 @@ The command lists all valid options. Here is a short overview over
 the different options available :
 
     autosync     - automatically synchronize the browser window
-    autorestart  - restart the shell when any base file changes
-    watchfiles   - watch all base files for changes
+    autorestart  - restart the shell when any required module changes
+                   This does not work with C<-e> oneliners.
+    watchfiles   - watch all required modules for changes
     cookiefile   - the file where to store all cookies
     dumprequests - dump all requests to STDOUT
-    useole       - use MS IE OLE to display HTML
-    browsercmd   - the shell command to display a HTML page. If you have
-                   MS Internet Explorer, you won't need this
-                   The first %s in this string will be replaced by
-                   the current url.
 
 =cut
 
@@ -1316,6 +1333,10 @@ sub shell {
   };
 };
 
+package WWW::Mechanize::Shell::Unwrap;
+
+sub DESTROY {$_[0]->()};
+
 1;
 
 __END__
@@ -1353,7 +1374,9 @@ __END__
   get http://www.corion.net/perl-dev
   save /.tar.gz$/
 
-=head1 DISPLAYING HTML
+=begin oldversion
+
+#=head1 DISPLAYING HTML
 
 WWW::Mechanize::Shell can display the HTML of the current page
 in your browser. Under Windows, this is done via an OLE call
@@ -1363,6 +1386,9 @@ of the following lines in your .mechanizerc :
 
   # for galeon
   set browsercmd "galeon -n %s"
+
+  # for mozilla (needs mozilla already started)
+  set browsercmd 'mozilla -remote "openURL(%s)"'
 
   # for opera (thanks to Tina Mueller)
   set browsercmd "opera -newwindow %s"
@@ -1380,6 +1406,7 @@ of the following lines in your .mechanizerc :
 
 The communication is done either via OLE or through tempfiles, so
 the URL in the browser will look weird.
+=end oldversion
 
 =head1 FILLING FORMS VIA CUSTOM CODE
 
@@ -1467,6 +1494,11 @@ The shell works without this patch and the online help is still
 available through C<perldoc WWW::Mechanize::Shell>
 
 =head1 BUGS
+
+Bug reports are very welcome - please use the RT interface at
+https://rt.cpan.org/NoAuth/Bugs.html?Dist=WWW-Mechanize-Shell . Please
+try to include as much (relevant) information as possible - a test script
+that replicates the undesired behaviour is welcome every time!
 
 =over 4
 
