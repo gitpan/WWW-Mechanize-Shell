@@ -3,18 +3,24 @@ use strict;
 
 use lib 'inc';
 use IO::Catch;
+use Test::More ();
 
 use File::Temp qw( tempfile );
+use WWW::Mechanize::Link;
 
 # pre-5.8.0's warns aren't caught by a tied STDERR.
 tie *STDOUT, 'IO::Catch', '_STDOUT_' or die $!;
 
+BEGIN {
+  # Choose a nonannoying HTML displayer:
+  $ENV{PERL_HTML_DISPLAY_CLASS} = 'HTML::Display::Dump';
+  # Disable all ReadLine functionality
+  $ENV{PERL_RL} = 0;
+};
+
 use vars qw( %tests );
 
 BEGIN {
-  # Disable all ReadLine functionality
-  $ENV{PERL_RL} = 0;
-
   %tests = (
       'autofill' => 'autofill test Fixed value',
       'back' => 'back',
@@ -27,6 +33,7 @@ BEGIN {
       'open' => 'open foo',
       'reload' => 'reload',
       'referrer' => 'referrer ""',
+      'referrer val' => 'referrer "foo"',
       'referer' => 'referer ""',
       'save' => 'save 0',
       'save re' => 'save /.../',
@@ -48,8 +55,8 @@ BEGIN {
 };
 
 use Test::More tests => scalar (keys %tests)*2 +1;
+BEGIN {   use_ok('WWW::Mechanize::Shell'); };
 SKIP: {
-use_ok('WWW::Mechanize::Shell');
 
 eval {
   require Test::MockObject;
@@ -83,7 +90,8 @@ $mock_agent->set_always( res => $mock_result )
            ->set_always( reload => $mock_result )
            ->set_always( current_form => $mock_form )
            ->set_always( follow => 1 )
-           ->set_always( links => [['foo','foo link','foo_link'],['foo2','foo2 link','foo2_link']])
+           ->set_list( links => WWW::Mechanize::Link->new('foo','foo link','foo_link',""),
+                                WWW::Mechanize::Link->new('foo2','foo2 link','foo2_link',""))
            ->set_always( agent => 'foo/1.0' )
            ->set_always( tick => 1 )
            ->set_always( timeout => 1 )
@@ -97,6 +105,7 @@ my @history;
 { no warnings 'redefine';
   *WWW::Mechanize::Shell::add_history = sub {
     shift;
+    # warn $_ for @_;
     push @history, join "", @_;
   };
 };
@@ -105,7 +114,7 @@ sub compiles_ok {
   my ($command,$testname) = @_;
   $testname ||= $command;
   @history = ();
-  $s->cmd('links');
+  # $s->cmd('links');
   $s->cmd($command);
   local $, = "\n";
   my ($fh,$name) = tempfile();

@@ -10,6 +10,7 @@ use URI::URL;
 use LWP::Simple;
 
 # pre-5.8.0's warns aren't caught by a tied STDERR.
+$SIG{__WARN__} = sub { $main::_STDERR_ .= join '', @_; };
 tie *STDOUT, 'IO::Catch', '_STDOUT_' or die $!;
 tie *STDERR, 'IO::Catch', '_STDERR_' or die $!;
 
@@ -34,12 +35,14 @@ BEGIN {
 };
 
 use Test::More tests => 1 + (scalar keys %tests)*6;
+BEGIN {
+  delete $ENV{PAGER};
+  $ENV{PERL_RL} = 0;
+  use_ok('WWW::Mechanize::Shell');
+};
 SKIP: {
 
 # Disable all ReadLine functionality
-$ENV{PERL_RL} = 0;
-
-use_ok('WWW::Mechanize::Shell');
 my $HTML = do { local $/; <DATA> };
 
 eval { require HTTP::Daemon; };

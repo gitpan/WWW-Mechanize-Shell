@@ -1,4 +1,4 @@
-#!D:\Programme\indigoperl-5.6\bin\perl.exe -w
+#!D:\perl\5.8.1\bin\perl.exe -w
 
 use Test::More 'no_plan';
 
@@ -22,7 +22,7 @@ sub READLINE {}
 sub GETC {}
 sub BINMODE {}
 
-my $Original_File = 'D:lib\HTML\Display\OSX\Camino.pm';
+my $Original_File = 'lib\HTML\Display\OSX\Camino.pm';
 
 package main;
 

@@ -5,8 +5,9 @@ WriteMakefile(
     'NAME'    => 'WWW::Mechanize::Shell',
     'VERSION_FROM'  => 'lib/WWW/Mechanize/Shell.pm', # finds $VERSION
     'PREREQ_PM'    => {'Term::Shell' => 0.01,
-    									 'URI::URL' => 0.00,
-                       'WWW::Mechanize' => 0.57,
+		       'URI::URL' => 0.00,
+		       'Test::Harness' => 2.30,
+                       'WWW::Mechanize' => 0.63,
                        'WWW::Mechanize::FormFiller' => 0.05,
                        'Hook::LexWrap' => 0.20,
                        'HTML::TokeParser::Simple' => 2.0,
@@ -59,13 +60,13 @@ BEGIN {
 
         return $out;
     }
-    
+
 		sub postamble {
     	return <<EOF
 cover:
 \trm -rf cover_db
-\tHARNESS_PERL_SWITCHES=-MDevel::Cover=-coverage,statement,time,-silent,1,-select,^blib/lib,+inc,Win32,-summary,0 \$(MAKE) test || true
-\t\$(PERL) /usr/bin/cover cover_db -report html 
+\tHARNESS_PERL_SWITCHES=-MDevel::Cover=-coverage,statement,branch,-silent,1,-select,^blib/lib,+inc,Win32,-summary,0 \$(MAKE) test || true
+\t/usr/bin/cover cover_db -report html
 EOF
 		}
 }

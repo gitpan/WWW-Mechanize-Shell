@@ -1,7 +1,24 @@
 Revision history for Perl extension WWW::Mechanize::Shell.
 
-0.29
+Todo:
   + Think about HTML::FillInForm for displaying changed form values interactively
+  + Check how the new WWW::Mechanize JavaScript handling interacts with the
+    shells own JS blocking (badly, I guess)
+
+0.30
+  - Now needs the latest? Test::Harness because otherwise some tests failed
+    from time to time for no apparent reason.
+  - using Devel::Cover. Code coverage of WWW/Mechanize/Shell.pm is now at 75.00%
+    through the test suite
+  - Provide better text for all links (for example when the content is an image)
+  - Now moved to use WWW::Mechanize::Link instead of direct array access
+  - This means it requires WWW::Mechanize 0.57 or higher
+  - added "comment" command, which allows to add comments to both, the shell
+    script and the generated script. (Donated by Alexander Goller)
+  - accomodated for most recent version of LWP, which dosen't die on failing host
+    lookups but returns error 500.
+
+0.29
   - Fixed bug when autocompletion did crash the shell (S. Rezic)
   - HTML::Display::Opera does not open a new window anymore (S. Rezic)
   - Moved private package "Catch" to IO::Catch and made all tests use that package
