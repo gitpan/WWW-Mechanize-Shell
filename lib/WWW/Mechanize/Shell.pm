@@ -6,7 +6,7 @@ use WWW::Mechanize;
 use HTTP::Cookies;
 
 use vars qw( $VERSION );
-$VERSION = '0.15';
+$VERSION = '0.16';
 
 =head1 NAME
 
@@ -363,7 +363,7 @@ sub run_get {
   $self->agent->form(1)
     if $self->agent->forms and scalar @{$self->agent->forms};
   $self->sync_browser if $self->option('autosync');
-  $self->add_history('$agent->get("'.$url.'");'."\n",'  $agent->form(1) if $agent->forms;');
+  $self->add_history( sprintf qq{\$agent->get('%s');\n  \$agent->form(1) if \$agent->forms;}, $url);
 };
 
 =head2 content
@@ -423,7 +423,7 @@ sub run_forms {
   if ($number) {
     $self->agent->form($number);
     $self->agent->current_form->dump;
-    $self->add_history('$agent->form('.$number.');');
+    $self->add_history(sprintf q{$agent->form(%s));}, $number);
   } else {
     my $count = 1;
     my $formref = $self->agent->forms;
@@ -466,10 +466,11 @@ Syntax:
 
 sub run_value {
   my ($self,$key,$value) = @_;
+  
   eval {
     $self->agent->current_form->value($key,$value);
     # Hmm - neither $key nor $value may contain backslashes nor single quotes ...
-    $self->add_history('$agent->current_form->value(\''.$key.'\',\''.$value.'\');');
+    $self->add_history( sprintf qq{\$agent->current_form->value('%s', '%s');}, $key, $value);
   };
   warn $@ if $@;
 };
@@ -513,7 +514,7 @@ sub run_click {
     if ($self->option('autosync')) {
       $self->sync_browser;
     };
-    $self->add_history('$agent->click(\''.$button.'\');');
+    $self->add_history( sprintf qq{\$agent->click('%s');}, $button );
   };
   warn $@ if $@;
 };
@@ -562,7 +563,7 @@ sub run_open {
   if (defined $link) {
     eval {
       $self->agent->follow($link);
-      $self->add_history('$agent->follow(\''.$user_link.'\');');
+      $self->add_history( sprintf qq{\$agent->follow('%s');}, $user_link);
       $self->agent->form(1);
       if ($self->option('autosync')) {
         $self->sync_browser;
@@ -687,7 +688,10 @@ value via the autofill command.
 
 sub run_fillout {
   my ($self) = @_;
-  $self->{formfiller}->fill_form($self->agent->current_form);
+  eval {
+    $self->{formfiller}->fill_form($self->agent->current_form);
+  };
+  warn $@ if $@;
   $self->add_history('$formfiller->fill_form($agent->current_form);');
 };
 
@@ -727,9 +731,9 @@ sub run_table {
       };
     };
 
-    $self->add_history('my @columns = ( ' . map( { s/(['\\])/\\$1/g; qq('$_') } @columns ) . ' );' );
+    $self->add_history( sprintf 'my @columns = ( %s );', join( ",", map( { s/(['\\])/\\$1/g; qq('$_') } @columns )));
     $self->add_history( <<'PRINTTABLE' );
-my $table = HTML::TableExtract->new( headers => [ @columns ]);');
+my $table = HTML::TableExtract->new( headers => [ @columns ]);
 (my $content = $self->agent->content) =~ s/\&nbsp;?//g;
 $table->parse($content);
 print join(", ", @columns),"\n";
@@ -834,7 +838,7 @@ sub run_autofill {
   if ($class) {
     eval {
       $self->{formfiller}->add_filler($name,$class,@args);
-      $self->add_history('$formfiller->add_filler( ',$name, ' => ',$class, ' => ', join( ",", @args), ');' );
+      $self->add_history( sprintf qq{\$formfiller->add_filler( %s => %s => %s ); }, $name, $class, join( ",", @args));
     };
     warn $@
       if $@;
@@ -916,6 +920,9 @@ of the following lines in your .mechanizerc :
   # for galeon
   set browsercmd "galeon -n %s"
 
+  # for opera (thanks to Tina Mueller)
+  set browsercmd "opera -newwindow %s"
+
   # for Win32, using Phoenix instead of IE
   set useole 0
   set browsercmd "phoenix.exe %s"
@@ -933,6 +940,24 @@ The C<history> command outputs a skeleton script that reproduces
 your actions as done in the current session. It pulls in
 C<WWW::Mechanize::FormFiller>, which is possibly not needed. You
 should add some error and connection checking afterwards.
+
+=head1 ADDING FIELDS TO HTML
+
+If you are automating a JavaScript dependent site, you will encounter
+JavaScript like this :
+
+    <script>
+      document.write( "<input type=submit name=submit>" );
+    </script>
+
+HTML::Form will not know about this and will not have provided a
+submit button for you (understandably). If you want to create such
+a submit button from within your automation script, use the following
+code :
+
+    $agent->current_form->push_input( submit => { name => "submit", value =>"submit" } );
+
+This also works for other dynamically generated input fields.
 
 =head1 PROXY SUPPORT
 
