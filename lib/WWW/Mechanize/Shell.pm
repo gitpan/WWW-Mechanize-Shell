@@ -6,7 +6,7 @@ use WWW::Mechanize;
 use HTTP::Cookies;
 
 use vars qw( $VERSION );
-$VERSION = '0.13';
+$VERSION = '0.15';
 
 =head1 NAME
 
@@ -149,24 +149,26 @@ sub init {
 
   $self->{options} = {
     autosync => 0,
+    warnings => 1,
     autorestart => 0,
     watchfiles => defined $args{watchfiles} ? $args{watchfiles} : 1,
     cookiefile => 'cookies.txt',
     dumprequests => 0,
-    useole => $^O =~ /mswin/i,
+    useole => ($^O =~ /mswin/i) ? 1:0,
     browsercmd => 'galeon -n %s',
   };
 
   # Keep track of the files we consist of, to enable automatic reloading
   $self->{files} = undef;
-  if ($self->{options}->{watchfiles}) {
+  if ($self->option('watchfiles')) {
     eval {
       require File::Modified;
       $self->{files} = File::Modified->new(files=>[values %INC, $0]);
     };
-    if ($@) {
-      warn "Module File::Modified not found. Automatic reloading disabled.\n";
-    };
+    #if ($@) {
+    #  warn "Module File::Modified not found. Automatic reloading disabled.\n"
+    #    if $self->option('warnings');
+    #};
   };
 
   # Read our .rc file :
@@ -199,6 +201,7 @@ sub option {
     $result;
   } else {
     Carp::carp "Unknown option '$option'";
+    undef;
   };
 };
 
@@ -446,7 +449,8 @@ sub run_dump {
   if ($form) {
     $form->dump
   } else {
-    warn "There is no form on the current page\n";
+    warn "There is no form on the current page\n"
+      if $self->option('warnings');
   };
 };
 
@@ -548,6 +552,10 @@ sub run_open {
     } else {
       print "Found $links[0]\n";
       $link = $links[0];
+      if ($possible_links[$count]->[0] =~ /^javascript:(.*)/i) {
+        print "Can't follow javascript link $1\n";
+        undef $link;
+      };
     };
   };
 
@@ -907,14 +915,14 @@ of the following lines in your .mechanizerc :
 
   # for galeon
   set browsercmd "galeon -n %s"
-  
+
   # for Win32, using Phoenix instead of IE
   set useole 0
   set browsercmd "phoenix.exe %s"
-  
+
   # More lines for other browsers are welcome
 
-The communication is done either via OLE or through tempfiles, so 
+The communication is done either via OLE or through tempfiles, so
 the URL in the browser will look weird. There is currently no
 support for Mac specific display of HTML, and I don't know enough
 about AppleScript events to remotely control a browser there.

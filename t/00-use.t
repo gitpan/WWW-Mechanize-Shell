@@ -7,13 +7,13 @@ SKIP: {
   eval { require Term::ReadKey; Term::ReadKey::GetTerminalSize() };
   if ($@) {
     diag "Term::ReadKey seems to want a terminal";
+    no warnings 'redefine';
     *Term::ReadKey::GetTerminalSize = sub {80,24};
   };
 
   use_ok("WWW::Mechanize::Shell");
 
   my $s = do {
-    local $SIG{__WARN__} = sub {};
     WWW::Mechanize::Shell->new("shell",rcfile => undef);
   };
   isa_ok($s,"WWW::Mechanize::Shell");
