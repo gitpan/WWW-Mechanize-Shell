@@ -53,6 +53,8 @@ BEGIN {
       source
       tables
       versions
+      ct
+      response
   );
   push @history_invariant, "#","      #", "# a comment", "  # another comment";
 
@@ -70,6 +72,11 @@ BEGIN {
       table
       ua
       value
+      tick
+      untick
+      referer
+      referrer
+      timeout
   );
 };
 
