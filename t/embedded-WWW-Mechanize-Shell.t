@@ -51,7 +51,7 @@ eval q{
   my $example = sub {
     local $^W = 0;
 
-#line 23 lib/WWW/Mechanize/Shell.pm
+#line 29 lib/WWW/Mechanize/Shell.pm
 
   #!/usr/bin/perl -w
   use strict;
@@ -72,7 +72,7 @@ eval q{
 
   }
 };
-is($@, '', "example from line 23");
+is($@, '', "example from line 29");
 
 };
 SKIP: {
@@ -97,7 +97,7 @@ SKIP: {
     {
     undef $main::_STDOUT_;
     undef $main::_STDERR_;
-#line 23 lib/WWW/Mechanize/Shell.pm
+#line 29 lib/WWW/Mechanize/Shell.pm
 
   #!/usr/bin/perl -w
   use strict;
