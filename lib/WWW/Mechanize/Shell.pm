@@ -10,7 +10,7 @@ use FindBin;
 use URI::URL;
 
 use vars qw( $VERSION @EXPORT );
-$VERSION = '0.20';
+$VERSION = '0.21';
 @EXPORT = qw( &shell );
 
 =head1 NAME
@@ -21,7 +21,7 @@ WWW::Mechanize::Shell - An interactive shell for WWW::Mechanize
 
 From the command line as
 
-  perl WWW::Mechanize::Shell -eshell
+  perl -MWWW::Mechanize::Shell -eshell
 
 or alternatively as a custom shell program via :
 
@@ -79,19 +79,8 @@ your current browsers cookies.
 # Blindly allow redirects
 {
   no warnings 'redefine';
-  *WWW::Mechanize::redirect_ok = sub { print "\nRedirecting to ",$_[1]->uri; $_[0]->{uri} = $_[1]->uri; 1 };
+  *WWW::Mechanize::redirect_ok = sub { $_[0]->{__www_mechanize_shell}->status( "\nRedirecting to ".$_[1]->uri ); $_[0]->{uri} = $_[1]->uri; 1 };
 }
-
-# TODO:
-# * Log facility, log all stuff to a file
-# * History persistence (see log facility)
-# DONE:
-# * Add auto form fill out stuff
-# * Add "open()" and "click()" RE functionality
-# * Modify WWW::Mechanize to accept REs as well as the other stuff
-# * Add simple script generation
-# * Fix Term::Shell command repetition on empty lines
-# * Add comment facility to Term::Shell
 
 eval { require Win32::OLE; Win32::OLE->import() };
 my $have_ole = $@ eq '';
@@ -102,7 +91,7 @@ This is the constructor for a new shell instance. Some of the options
 can be passed to the constructor as parameters.
 
 By default, a file C<.mechanizerc> (respectively C<mechanizerc> under Windows)
-is the users home directory is executed before the interactive shell loop is
+in the users home directory is executed before the interactive shell loop is
 entered. This can be used to set some defaults. If you want to supply a different
 filename for the rcfile, the C<rcfile> parameter can be passed to the constructor :
 
@@ -115,6 +104,8 @@ sub init {
   my ($name,%args) = @{$self->{API}{args}};
 
   $self->{agent} = WWW::Mechanize->new();
+  $self->agent->{__www_mechanize_shell} = $self;
+
   $self->{browser} = undef;
   $self->{formfiller} = WWW::Mechanize::FormFiller->new(default => [ Ask => $self ]);
 
@@ -160,6 +151,19 @@ sub init {
     $self->display_user_warning( "Module File::Modified not found. Automatic reloading disabled.\n" )
       if ($@);
   };
+};
+
+=head2 C<$shell-E<gt>release_agent>
+
+Since the shell stores a reference back to itself within the
+WWW::Mechanize instance, it is necessary to break this
+circular reference. This method does this.
+
+=cut
+
+sub release_agent {
+  my ($self) = @_;
+  $self->{agent} = undef;
 };
 
 =head2 C<$shell-E<gt>source_file FILENAME>
@@ -309,11 +313,15 @@ sub script {
   $prefix ||= "";
 
   my @result = sprintf <<'HEADER', $^X;
-#%s -w
+#!%s -w
 use strict;
 use WWW::Mechanize;
 use WWW::Mechanize::FormFiller;
 use URI::URL;
+
+{ no warnings 'redefine';
+  *WWW::Mechanize::redirect_ok = sub { $_[0]->{uri} = $_[1]->uri; 1 };
+};
 
 my $agent = WWW::Mechanize->new();
 my $formfiller = WWW::Mechanize::FormFiller->new();
@@ -335,6 +343,29 @@ sub status {
   print join "", @_;
 };
 
+=head2 C<$shell-E<gt>display FILENAME LINES>
+
+C<display> is called to output listings, currently from the
+C<history> and C<script> commands. If the second parameter
+is defined, it is the name of the file to be written,
+otherwise the lines are displayed to the user.
+
+=cut
+
+sub display {
+  my ($self,$filename,@lines) = @_;
+  if (defined $filename) {
+    eval {
+      open my $f, ">", $filename
+        or die "Couldn't create $filename : $!";
+      print $f join( "", map { "$_\n" } (@lines) );
+      close $f;
+    };
+    warn $@ if $@;
+  } else {
+    print join( "", map { "$_\n" } (@lines) );
+  };
+};
 
 # sub-classed from Term::Shell to handle all run_ requests that have no corresponding sub
 # This is used for comments
@@ -437,7 +468,7 @@ sub run_get {
   my ($self,$url) = @_;
   $self->status( "Retrieving $url" );
   my $code;
-  eval { $code = $self->agent->get($url)->code};
+  eval { $code = $self->agent->get($url)->code };
   if ($@) {
     print "\n$@\n" if $@;
     $self->agent->back;
@@ -475,7 +506,8 @@ sub run_save {
 
   my @links = ();
   my @all_links = $self->agent->links;
-  push @history, q{my @links;};
+  push @history, q{my @links;} . "\n";
+  push @history, q{my @all_links = $agent->links();} . "\n";
 
   if ($user_link =~ m!^/(.*)/$!) {
     my $re = qr($1);
@@ -484,15 +516,15 @@ sub run_save {
     if (@links == 0) {
       print "No match for /$re/.\n";
     };
-    push @history, sprintf q{@links = map { /%s/ } $agent->links();}, $re;
+    push @history, q{my $count = -1;} . "\n";
+    push @history, sprintf q{@links = map { $count++; (($_->[0] =~ /%s/)||($_->[1] =~ /%s/)) ? $count : () } @all_links;} . "\n", $re, $re;
   } else {
     @links = $user_link;
-    push @history, sprintf q{@links = '%s';}, $user_link;
+    push @history, sprintf q{@links = '%s';} . "\n", $user_link;
   };
 
   if (@links) {
     $self->add_history( @history,<<'CODE' );
-  my @all_links = $agent->links();
   my $base = $agent->uri;
   for my $link (@links) {
     my $target = $all_links[$link]->[0];
@@ -627,8 +659,8 @@ sub run_forms {
   my ($self,$number) = @_;
   if ($number) {
     $self->agent->form($number);
-    $self->agent->current_form->dump;
-    $self->add_history(sprintf q{$agent->form(%s));}, $number);
+    $self->status($self->agent->current_form->dump);
+    $self->add_history(sprintf q{$agent->form(%s);}, $number);
   } else {
     my $count = 1;
     my $formref = $self->agent->forms;
@@ -865,27 +897,39 @@ sub run_set {
 
 Display your current session history as the relevant commands.
 
+Syntax:
+
+  history [FILENAME]
+
 Commands that have no influence on the browser state are not added
-to the history.
+to the history. If a parameter is given to the C<history> command,
+the history is saved to that file instead of displayed onscreen.
 
 =cut
 
 sub run_history {
-  my ($self) = @_;
-  print join( "", map { "$_\n" } ($self->history) ), "\n";
+  my ($self,$filename) = @_;
+  $self->display($filename,$self->history);
 };
 
 =head2 script
 
 Display your current session history as a Perl script using WWW::Mechanize.
 
+Syntax:
+
+  script [FILENAME]
+
+If a parameter is given to the C<script> command, the script is saved to
+that file instead of displayed on the console.
+
 This command was formerly known as C<history>.
 
 =cut
 
 sub run_script {
-  my ($self) = @_;
-  print join( "\n", $self->script("  ")), "\n";
+  my ($self,$filename) = @_;
+  $self->display($filename,$self->script("  "));
 };
 
 =head2 fillout
@@ -899,11 +943,15 @@ value via the autofill command.
 
 sub run_fillout {
   my ($self) = @_;
+  my @interactive_values;
   eval {
+    $self->{answers} = [];
     $self->{formfiller}->fill_form($self->agent->current_form);
+    @interactive_values = @{$self->{answers}};
   };
   warn $@ if $@;
-  $self->add_history('$formfiller->fill_form($agent->current_form);');
+  $self->add_history( join( "\n", 
+                      map { sprintf( q[$formfiller->add_filler( '%s' => Fixed => '%s' );], @$_ ) } @interactive_values) . '$formfiller->fill_form($agent->current_form);');
 };
 
 =head2 auth
@@ -1099,7 +1147,7 @@ Examples:
 
   autofill login Fixed corion
   autofill password Ask
-  autofill selection Random
+  autofill selection Random red green orange
   autofill session Keep
 
 =cut
@@ -1111,7 +1159,7 @@ sub run_autofill {
   if ($class) {
     eval {
       $self->{formfiller}->add_filler($name,$class,@args);
-      $self->add_history( sprintf qq{\$formfiller->add_filler( %s => %s => '%s' ); }, $name, $class, join( ",", @args));
+      $self->add_history( sprintf qq{\$formfiller->add_filler( "%s" => "%s" => %s ); }, $name, $class, join( ",", map {qq{'$_'}} @args));
     };
     warn $@
       if $@;
@@ -1215,11 +1263,13 @@ sub shell {
   use base 'WWW::Mechanize::FormFiller::Value::Callback';
 
   use vars qw( $VERSION );
-  $VERSION = '0.20';
+  $VERSION = '0.21';
 
   sub new {
     my ($class,$name,$shell) = @_;
-    my $self = $class->SUPER::new($name, \&ask_value);
+    # Using the name here to allow for late binding and overriding via eval()
+    # from the shell command line
+    my $self = $class->SUPER::new($name, __PACKAGE__ . '::ask_value');
     $self->{shell} = $shell;
     Carp::carp "WWW::Mechanize::FormFiller::Value::Ask->new called without a value for the shell" unless $self->{shell};
 
@@ -1240,6 +1290,7 @@ sub shell {
                             ($input->value||''), @values );
     };
     undef $value if ($value eq "" and $input->type eq "checkbox");
+    push @{$self->{shell}->{answers}}, [ $input->name, $value ];
     $value;
   };
 };
@@ -1307,9 +1358,7 @@ of the following lines in your .mechanizerc :
   # More lines for other browsers are welcome
 
 The communication is done either via OLE or through tempfiles, so
-the URL in the browser will look weird. There is currently no
-support for Mac specific display of HTML, and I don't know enough
-about AppleScript events to remotely control a browser there.
+the URL in the browser will look weird.
 
 =head1 FILLING FORMS VIA CUSTOM CODE
 
@@ -1322,7 +1371,7 @@ namespace. You can inject new subroutines there and these get picked
 up by the Callback class of WWW::Mechanize::FormFiller :
 
   # Fill in the "date" field with the current date/time as string
-  eval sub custom_today { scalar localtime };
+  eval sub &::custom_today { scalar localtime };
   autofill date Callback WWW::Mechanize::Shell::custom_today
   fillout
 
@@ -1330,9 +1379,13 @@ This method can also be used to retrieve data from shell scripts :
 
   # Fill in the "date" field with the current date/time as string
   # works only if there is a program "date"
-  eval sub custom_today { chomp `date` };
+  eval sub &::custom_today { chomp `date` };
   autofill date Callback WWW::Mechanize::Shell::custom_today
   fillout
+  
+As the namespace is different between the shell and the generated
+script, make sure you always fully qualify your subroutine names,
+either in your own namespace or in the main namespace.
 
 =head1 GENERATED SCRIPTS
 

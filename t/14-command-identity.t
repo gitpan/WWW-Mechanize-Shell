@@ -44,23 +44,56 @@ BEGIN {
     eval_shell => { requests => 1, lines => [ 'get %s', 'eval $self->agent->ct' ], location => '%s' },
     eval_sub => { requests => 2, lines => [
 						'# Fill in the "date" field with the current date/time as string',
-  					'eval sub custom_today { "20030511" };',
-  					'autofill text Callback WWW::Mechanize::Shell::custom_today',
+  					'eval sub ::custom_today { "20030511" };',
+  					'autofill session Callback ::custom_today',
   					'get %s',
   					'fillout',
+  					'eval $self->agent->current_form->value("session")',
   					'submit',
+  					'content',
     ], location => '%sformsubmit' },
+    form => { requests => 2, lines => [ 'get %s','form 1','submit' ], location => '%sformsubmit' },
+    formfiller_chars => { requests => 2,
+    									lines => [ 'eval srand 0', 'autofill query Random::Chars size 5 set alpha', 'get %s', 'fillout','submit','content' ],
+    									location => '%sformsubmit' },
+    formfiller_date => { requests => 2,
+    									lines => [ 'eval srand 0', 'autofill query Random::Date string %%Y%%m%%d', 'get %s', 'fillout','submit','content' ],
+    									location => '%sformsubmit' },
+    formfiller_default => { requests => 2,
+    									lines => [ 'autofill query Default foo', 'get %s', 'fillout','submit','content' ],
+    									location => '%sformsubmit' },
+    formfiller_fixed => { requests => 2,
+    									lines => [ 'autofill query Fixed foo', 'get %s', 'fillout','submit','content' ],
+    									location => '%sformsubmit' },
+    formfiller_keep => { requests => 2,
+    									lines => [ 'autofill query Keep foo', 'get %s', 'fillout','submit','content' ],
+    									location => '%sformsubmit' },
+    formfiller_random => { requests => 2,
+    									lines => [ 'autofill query Random foo', 'get %s', 'fillout','submit','content' ],
+    									location => '%sformsubmit' },
+    formfiller_word => { requests => 2,
+    									lines => [ 'eval srand 0', 'autofill query Random::Word size 1', 'get %s', 'fillout','submit','content' ],
+    									location => '%sformsubmit' },
     get => { requests => 1, lines => [ 'get %s' ], location => '%s' },
     get_content => { requests => 1, lines => [ 'get %s', 'content' ], location => '%s' },
+    get_redirect => { requests => 1, lines => [ 'get %sredirect/startpage' ], location => '%sstartpage' },
     get_save => { requests => 4, lines => [ 'get %s','save "/\.save_log_server_test\.tmp$/"' ], location => '%s' },
     get_value_click => { requests => 2, lines => [ 'get %s','value query foo', 'click submit' ], location => '%sformsubmit' },
     get_value_submit => { requests => 2, lines => [ 'get %s','value query foo', 'submit' ], location => '%sformsubmit' },
-    get_value2_submit => { requests => 2, lines => [ 
+    get_value2_submit => { requests => 2, lines => [
     				'get %s',
-    				'value query foo', 
-    				'value session 2', 
-    				'submit' 
+    				'value query foo',
+    				'value session 2',
+    				'submit'
     ], location => '%sformsubmit' },
+    interactive_script_creation => { requests => 2,
+    									lines => [ 'eval @::list=qw(foo bar xxx)', 
+    														 'eval no warnings "once"; *WWW::Mechanize::FormFiller::Value::Ask::ask_value = sub { my $value=shift @::list; push @{$_[0]->{shell}->{answers}}, [ $_[1]->name, $value ]; $value }', 
+    														 'get %s', 
+    														 'fillout',
+    														 'submit',
+    														 'content' ],
+    									location => '%sformsubmit' },
     open_parm => { requests => 2, lines => [ 'get %s','open 0','content' ], location => '%stest' },
     open_re => { requests => 2, lines => [ 'get %s','open "foo1"','content' ], location => '%sfoo1.save_log_server_test.tmp' },
     open_re2 => { requests => 2, lines => [ 'get %s','open "/foo1/"','content' ], location => '%sfoo1.save_log_server_test.tmp' },
@@ -78,6 +111,11 @@ BEGIN {
     $tests{get_table} = { requests => 1, lines => [ 'get %s','table' ], location => '%s' };
     $tests{get_table_params} = { requests => 1, lines => [ 'get %s','table Col2 Col1' ], location => '%s' };
   };
+  
+  # To ease zeroing in on tests
+  #for (sort keys %tests) {
+  #  delete $tests{$_} unless /^i|^eval_sub/;
+  #};
 };
 
 use Test::More tests => 1 + (scalar keys %tests)*6;
