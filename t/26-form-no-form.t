@@ -20,13 +20,12 @@ my @warnings;
 use_ok('WWW::Mechanize::Shell');
 my $s = WWW::Mechanize::Shell->new( 'test', rcfile => undef, warnings => undef );
 
-{ no warnings 'once';
+{ no warnings qw'redefine once';
 *WWW::Mechanize::Shell::status = sub {};
 };
 
-$s->agent->{content} = "<html><body>No form here</body></html>\n";
 $s->agent->{base} = 'http://www.google.com/';
-$s->agent->_parse_html();
+$s->agent->update_html("<html><body>No form here</body></html>\n");
 
 eval {
   $s->cmd("form foo");

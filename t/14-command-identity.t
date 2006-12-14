@@ -28,6 +28,7 @@ BEGIN {
                                             'autofill cat Keep',
                                             'fillout',
                                             'submit' ], location => qr'^%s/formsubmit\?session=1&query=foo&cat=cat_foo&cat=cat_bar$'},
+    auth => { requests => 1, lines => [ 'auth localhost:80 realm user password', 'get %s' ], location => qr'^%s/$' },
     back => { requests => 2, lines => [ 'get %s','open 0','back' ], location => qr'^%s/$' },
     content_save => { requests => 1, lines => [ 'get %s','content tmp.content','eval unlink "tmp.content"'], location => qr'^%s/$' },
     comment => { requests => 1, lines => [ '# a comment','get %s','# another comment' ], location => qr'^%s/$' },
@@ -115,7 +116,7 @@ BEGIN {
     ], location => qr'^%s/formsubmit\?session=2&query=foo&cat=cat_foo&cat=cat_bar' },
     interactive_script_creation => { requests => 2,
     									lines => [ 'eval @::list=qw(foo bar xxx)',
-    														 'eval no warnings "once"; *WWW::Mechanize::FormFiller::Value::Ask::ask_value = sub { my $value=shift @::list; push @{$_[0]->{shell}->{answers}}, [ $_[1]->name, $value ]; $value }',
+    														 'eval no warnings qw"redefine once"; *WWW::Mechanize::FormFiller::Value::Ask::ask_value = sub { my $value=shift @::list; push @{$_[0]->{shell}->{answers}}, [ $_[1]->name, $value ]; $value }',
 											           'autofill cat Keep',
     														 'get %s',
     														 'fillout',
@@ -156,9 +157,12 @@ BEGIN {
   };
 
   # To ease zeroing in on tests
-  #for (sort keys %tests) {
-  #  delete $tests{$_} unless /save/;
-  #};
+  if (@ARGV) {
+      my $re = join "|", @ARGV;
+      for (sort keys %tests) {
+           delete $tests{$_} unless /$re/o;
+        };
+    };
 };
 
 use Test::More tests => 1 + (scalar keys %tests)*7;
@@ -180,9 +184,9 @@ delete $ENV{HTTP_PROXY};
 
 use vars qw( $actual_requests $dumped_requests );
 {
-  no warnings 'redefine';
-  my $old_request = *WWW::Mechanize::request{CODE};
-  *WWW::Mechanize::request = sub {
+  no warnings qw'redefine once';
+  my $old_request = *WWW::Mechanize::_make_request{CODE};
+  *WWW::Mechanize::_make_request = sub {
     $actual_requests++;
     goto &$old_request;
   };
