@@ -1,10 +1,13 @@
-# http://module-build.sourceforge.net/META-spec.html
-#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
-name:         WWW-Mechanize-Shell
-version:      0.46
-version_from: lib/WWW/Mechanize/Shell.pm
-installdirs:  site
-requires:
+--- #YAML:1.0
+name:                WWW-Mechanize-Shell
+version:             0.47
+abstract:            An interactive shell for WWW::Mechanize
+license:             ~
+author:              
+    - Max Maischein <corion@cpan.org>
+generated_by:        ExtUtils::MakeMaker version 6.42
+distribution_type:   module
+requires:     
     Hook::LexWrap:                 0.2
     HTML::Display:                 0
     HTML::TokeParser::Simple:      2
@@ -14,6 +17,6 @@ requires:
     URI::URL:                      0
     WWW::Mechanize:                1.2
     WWW::Mechanize::FormFiller:    0.05
-
-distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.30
+meta-spec:
+    url:     http://module-build.sourceforge.net/META-spec-v1.3.html
+    version: 1.3
