@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                WWW-Mechanize-Shell
-version:             0.47
+version:             0.48
 abstract:            An interactive shell for WWW::Mechanize
 license:             ~
 author:              
