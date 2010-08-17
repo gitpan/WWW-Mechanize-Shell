@@ -5,11 +5,19 @@ Todo:
   + Check how the new WWW::Mechanize JavaScript handling interacts with the
     shells own JS blocking (badly, I guess)
   + Use Scalar::Util::weaken if available
-  + Spin off HTML::Display into its own distribution
   + Think how to add other (Xpath) extractions to conveniently
     display stuff via CSS selectors or XPath selectors. Steal
     from Web::Scraper.
   + There is a memory leak between ::FormFiller and ::Shell
+  + Ditch Hook::LexWrap now that LWP::UserAgent has progress callbacks
+
+0.49 20100817
+  + Apply [rt.cpan.org #59246] , 
+    thanks to Ansgar Burchardt
+    This fixes another case where API changes in LWP weren't mirrored
+    by this module.
+  + Fix t/14-command-identity.t to not make an external request anymore
+    Addresses [rt.cpan.org #59883]
 
 0.48 20081109
   + More test fixes for incompatibilities between LWP and Mechanize 1.34+
@@ -72,7 +80,7 @@ Todo:
   - Bumped module version
   - Fix for RT 22121 - shell does not start
 
-0.38 200612xx
+0.38 20061214
   - Bumped module version
   - Added a test for HTML::TableExtract functionality
     which went untested so far

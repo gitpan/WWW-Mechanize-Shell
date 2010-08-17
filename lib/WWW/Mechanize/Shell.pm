@@ -15,7 +15,7 @@ use HTML::TokeParser::Simple;
 use B::Deparse;
 
 use vars qw( $VERSION @EXPORT %munge_map );
-$VERSION = '0.48';
+$VERSION = '0.49';
 @EXPORT = qw( &shell );
 
 =head1 NAME
@@ -318,7 +318,13 @@ sub prompt_str {
 };
 
 sub request_dumper { print $_[1]->as_string };
-sub response_dumper { print $_[1]->as_string };
+sub response_dumper {
+  if (ref $_[1] eq 'ARRAY') {
+    print $_[1]->[0]->as_string;
+  } else {
+    print $_[1]->as_string;
+  }
+};
 
 sub re_or_string {
   my ($self,$arg) = @_;
@@ -1961,7 +1967,7 @@ load their proxies from the environment.
 =head1 ONLINE HELP
 
 The online help feature is currently a bit broken in C<Term::Shell>,
-but a fix is in the works. Until then, you can reenable the
+but a fix is in the works. Until then, you can re-enable the
 dynamic online help by patching C<Term::Shell> :
 
 Remove the three lines
@@ -2034,7 +2040,7 @@ invocation of the shell like with CPAN :
 
 This library is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
 
-Copyright (C) 2002,2008 Max Maischein
+Copyright (C) 2002,2010 Max Maischein
 
 =head1 AUTHOR
 
@@ -2044,6 +2050,6 @@ Please contact me if you find bugs or otherwise improve the module. More tests a
 
 =head1 SEE ALSO
 
-L<WWW::Mechanize>,L<WWW::Mechanize::FormFiller>
+L<WWW::Mechanize>,L<WWW::Mechanize::FormFiller>,L<WWW::Mechanize::Firefox>
 
 =cut
