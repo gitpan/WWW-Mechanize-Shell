@@ -15,7 +15,7 @@ use HTML::TokeParser::Simple;
 use B::Deparse;
 
 use vars qw( $VERSION @EXPORT %munge_map );
-$VERSION = '0.49';
+$VERSION = '0.50';
 @EXPORT = qw( &shell );
 
 =head1 NAME
@@ -2035,6 +2035,16 @@ is mainly for convenience so you can use the following commandline
 invocation of the shell like with CPAN :
 
   perl -MWWW::Mechanize::Shell -e"shell"
+
+=head1 REPOSITORY
+
+The public repository of this module is 
+L<http://github.com/Corion/WWW-Mechanize-Shell>.
+
+=head1 SUPPORT
+
+The public support forum of this module is
+L<http://perlmonks.org/>.
 
 =head1 COPYRIGHT AND LICENSE
 
