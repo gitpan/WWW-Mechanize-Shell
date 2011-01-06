@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               WWW-Mechanize-Shell
-version:            0.51
+version:            0.52
 abstract:           An interactive shell for WWW::Mechanize
 author:
     - Max Maischein <corion@cpan.org>
