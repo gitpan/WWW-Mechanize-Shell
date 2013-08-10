@@ -1,31 +1,33 @@
---- #YAML:1.0
-name:               WWW-Mechanize-Shell
-version:            0.52
-abstract:           An interactive shell for WWW::Mechanize
+---
+abstract: 'An interactive shell for WWW::Mechanize'
 author:
-    - Max Maischein <corion@cpan.org>
-license:            unknown
-distribution_type:  module
-configure_requires:
-    ExtUtils::MakeMaker:  0
+  - 'Max Maischein <corion@cpan.org>'
 build_requires:
-    ExtUtils::MakeMaker:  0
-requires:
-    Hook::LexWrap:        0.2
-    HTML::Display:        0
-    HTML::TokeParser::Simple:  2
-    LWP:                  5.69
-    parent:               0
-    Term::Shell:          0.02
-    Test::Harness:        2.3
-    URI::URL:             0
-    WWW::Mechanize:       1.2
-    WWW::Mechanize::FormFiller:  0.05
-no_index:
-    directory:
-        - t
-        - inc
-generated_by:       ExtUtils::MakeMaker version 6.50
+  ExtUtils::MakeMaker: 0
+configure_requires:
+  ExtUtils::MakeMaker: 0
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 6.62, CPAN::Meta::Converter version 2.130880'
+license: unknown
 meta-spec:
-    url:      http://module-build.sourceforge.net/META-spec-v1.4.html
-    version:  1.4
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+name: WWW-Mechanize-Shell
+no_index:
+  directory:
+    - t
+    - inc
+requires:
+  HTML::Display: 0
+  HTML::TokeParser::Simple: 2
+  Hook::LexWrap: 0.2
+  LWP: 5.69
+  Term::Shell: 0.02
+  Test::Harness: 2.3
+  URI::URL: 0
+  WWW::Mechanize: 1.2
+  WWW::Mechanize::FormFiller: 0.05
+  parent: 0
+resources:
+  repository: https://github.com/Corion/WWW-Mechanize-Shell
+version: 0.53
